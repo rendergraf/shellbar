@@ -7,6 +7,7 @@
   <a href="https://github.com/rendergraf/shellbar"><img src="https://img.shields.io/github/forks/rendergraf/shellbar" alt="GitHub Forks"></a>
   <a href="https://github.com/rendergraf/shellbar/blob/main/LICENSE"><img src="https://img.shields.io/github/license/rendergraf/shellbar" alt="MIT License"></a>
   <a href="https://rendergraf.github.io/shellbar/"><img src="https://img.shields.io/badge/Website-shellbar-blue" alt="Website"></a>
+  <a href="https://github.com/rendergraf/shellbar/releases/latest"><img src="https://img.shields.io/github/v/release/rendergraf/shellbar" alt="Latest Release"></a>
 </p>
 
 ## Tech Stack
@@ -58,6 +59,28 @@ to run any command on the active terminal.
 - `Alt+1`..`Alt+0` shortcuts for toolbar buttons
 - Wayland and X11 compatible
 
+## Install
+
+### Debian/Ubuntu (pre-built .deb)
+
+```sh
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.0.0_amd64.deb
+sudo dpkg -i shellbar_1.0.0_amd64.deb
+sudo apt-get install -f
+```
+
+### Build from source
+
+```sh
+git clone https://github.com/rendergraf/shellbar
+cd shellbar
+cmake -B build -G Ninja
+cmake --build build
+./build/shellbar
+```
+
+Release build: `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release`
+
 ## Requirements
 
 | Dependency | Version | Purpose |
@@ -81,19 +104,6 @@ sudo apt install build-essential cmake ninja-build \
 ```
 
 Zig: download from https://ziglang.org/download/ (>= 0.15.2).
-
-## Building
-
-```sh
-git clone https://github.com/rendergraf/shellbar
-cd shellbar
-cmake -B build -G Ninja
-cmake --build build
-./build/shellbar
-```
-
-Debug build: `cmake -B build -G Ninja`
-Release build: `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release`
 
 ## Configuration
 
