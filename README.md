@@ -5,7 +5,8 @@
 <p align="center">
   <a href="https://github.com/rendergraf/shellbar"><img src="https://img.shields.io/github/stars/rendergraf/shellbar" alt="GitHub Stars"></a>
   <a href="https://github.com/rendergraf/shellbar"><img src="https://img.shields.io/github/forks/rendergraf/shellbar" alt="GitHub Forks"></a>
-  <a href="https://github.com/rendergraf/shellbar/blob/master/LICENSE"><img src="https://img.shields.io/github/license/rendergraf/shellbar" alt="MIT License"></a>
+  <a href="https://github.com/rendergraf/shellbar/blob/main/LICENSE"><img src="https://img.shields.io/github/license/rendergraf/shellbar" alt="MIT License"></a>
+  <a href="https://rendergraf.github.io/shellbar/"><img src="https://img.shields.io/badge/Website-shellbar-blue" alt="Website"></a>
 </p>
 
 ## Tech Stack

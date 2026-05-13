@@ -30,6 +30,18 @@ add_executable(shellbar
   sb_config.c
   sb_preferences_dialog.c
 )
+
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/shellbar-resources.c
+  COMMAND glib-compile-resources
+    --target=${CMAKE_CURRENT_BINARY_DIR}/shellbar-resources.c
+    --generate-source
+    ${CMAKE_CURRENT_SOURCE_DIR}/shellbar.gresource.xml
+  DEPENDS shellbar.gresource.xml
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  COMMENT "Compiling GResource: shellbar.gresource.xml"
+)
+target_sources(shellbar PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/shellbar-resources.c)
 target_include_directories(shellbar PRIVATE
   ${ghostty_SOURCE_DIR}/include
   ${GTK4_INCLUDE_DIRS}

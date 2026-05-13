@@ -395,7 +395,11 @@ static void sb_window_class_init(SbWindowClass *klass) {
 }
 
 static void set_app_icon(GtkWindow *win) {
-  gtk_window_set_icon_name(win, "shellbar");
+  GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(win));
+  GtkIconTheme *theme = gtk_icon_theme_get_for_display(display);
+  gtk_icon_theme_add_resource_path(theme, "/com/shellbar/icons");
+
+  gtk_window_set_default_icon_name("shellbar");
 }
 
 static gboolean focus_first_tab(gpointer data) {
