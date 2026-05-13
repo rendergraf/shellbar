@@ -94,22 +94,6 @@ kill -HUP $(pidof shellbar)
 | `Ctrl+T` | New tab |
 | `Alt+1`..`Alt+9`, `Alt+0` | Execute toolbar buttons 1–10 |
 
-## Window Layout
-
-```
-┌──────────────────────────────────────────────────┐
-│ [+] [≡]                                         │  ← AdwHeaderBar (drag handle + new tab + menu)
-├──────────────────────────────────────────────────┤
-│ [Terminal 1] [Terminal 2]  [*]                  │  ← AdwTabBar (standalone bar, always visible)
-├──────────────────────────────────────────────────┤
-│ [▶ Storybook] [▶ Build] [▶ Test] [+]             │  ← Toolbar (command buttons)
-├──────────────────────────────────────────────────┤
-│                                                  │
-│  ~ $ _                                           │  ← Terminal (AdwTabView content)
-│                                                  │
-│                                                  │
-└──────────────────────────────────────────────────┘
-```
 
 ### Tab architecture
 
@@ -131,9 +115,7 @@ shellbar/
 ├── sb_terminal.c/h      # Terminal: PTY + libghostty-vt + Cairo render + input
 ├── sb_toolbar.c/h       # Toolbar with command buttons
 ├── sb_config.c/h        # Config key=value from ~/.config/shellbar/config
-├── PLAN.md              # Architecture docs
-├── README.md            # This file
-└── TODO.md              # Task list
+└── README.md            # This file
 ```
 
 ### Keyboard flow
