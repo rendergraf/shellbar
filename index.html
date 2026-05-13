@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShellBar — Terminal with command toolbar</title>
+  <meta name="description" content="ShellBar is a terminal emulator built on Ghostty's VT engine with a configurable toolbar for launching commands with a single click.">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', monospace;
+      background: #0d1117;
+      color: #c9d1d9;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    .container { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 100px 0 60px;
+      border-bottom: 1px solid #21262d;
+    }
+    .hero-icon { width: 96px; height: 96px; margin-bottom: 24px; }
+    .hero h1 {
+      font-size: 48px;
+      font-weight: 700;
+      color: #58a6ff;
+      margin-bottom: 12px;
+      letter-spacing: -1px;
+    }
+    .hero .tagline {
+      font-size: 18px;
+      color: #8b949e;
+      max-width: 560px;
+      margin: 0 auto 32px;
+    }
+
+    /* Buttons */
+    .btn-group { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 24px; border-radius: 6px;
+      font-size: 14px; font-weight: 600; text-decoration: none;
+      transition: all 0.15s ease;
+    }
+    .btn-primary {
+      background: #238636; color: #fff; border: 1px solid #2ea043;
+    }
+    .btn-primary:hover { background: #2ea043; }
+    .btn-secondary {
+      background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+    }
+    .btn-secondary:hover { background: #30363d; }
+
+    /* Badges */
+    .badges {
+      display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+      margin-top: 28px;
+    }
+    .badges img { height: 20px; }
+
+    /* Sections */
+    section { padding: 64px 0; }
+    section:nth-child(even) { background: #0d1117; }
+    section:nth-child(odd) { background: #161b22; }
+    section h2 {
+      font-size: 28px; color: #f0f6fc; margin-bottom: 32px;
+      text-align: center; font-weight: 600;
+    }
+
+    /* Features grid */
+    .features {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+    }
+    .feature {
+      background: #0d1117; border: 1px solid #21262d; border-radius: 8px;
+      padding: 24px; transition: border-color 0.15s;
+    }
+    .feature:hover { border-color: #30363d; }
+    .feature h3 { font-size: 16px; color: #58a6ff; margin-bottom: 8px; }
+    .feature p { font-size: 13px; color: #8b949e; }
+
+    /* Terminal mock */
+    .terminal-mock {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      overflow: hidden;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    .terminal-header {
+      background: #161b22;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid #21262d;
+    }
+    .terminal-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+    }
+    .terminal-dot.red { background: #ff5f56; }
+    .terminal-dot.yellow { background: #ffbd2e; }
+    .terminal-dot.green { background: #27c93f; }
+    .terminal-title {
+      flex: 1; text-align: center; font-size: 12px; color: #8b949e;
+    }
+    .terminal-body {
+      padding: 16px;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+    .prompt { color: #3fb950; }
+    .cmd { color: #79c0ff; }
+    .output { color: #8b949e; }
+    .toolbar-mock {
+      display: flex; gap: 6px; padding: 8px 12px;
+      background: #161b22; border-top: 1px solid #21262d;
+      flex-wrap: wrap;
+    }
+    .toolbar-btn {
+      background: rgba(255,255,255,0.06);
+      border: none; border-radius: 4px;
+      padding: 4px 12px;
+      font-size: 12px; color: #c9d1d9; font-family: inherit;
+    }
+    .toolbar-btn:hover { background: rgba(255,255,255,0.12); }
+
+    /* Install */
+    .install-box {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .install-box code {
+      display: block;
+      background: #0d1117;
+      padding: 12px 16px;
+      border-radius: 4px;
+      margin-top: 12px;
+      font-size: 13px;
+      color: #79c0ff;
+      overflow-x: auto;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 40px 0;
+      font-size: 12px;
+      color: #484f58;
+    }
+    footer a { color: #58a6ff; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 600px) {
+      .hero { padding: 60px 0 40px; }
+      .hero h1 { font-size: 32px; }
+      .hero .tagline { font-size: 15px; }
+    }
+  </style>
+</head>
+<body>
+
+  <section style="background:#0d1117;">
+    <div class="hero container">
+      <svg class="hero-icon" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="6" y="12" width="84" height="56" rx="6" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+        <rect x="10" y="74" width="76" height="14" rx="4" fill="#0d1117" stroke="#21262d" stroke-width="1.5"/>
+        <rect x="14" y="78" width="16" height="6" rx="3" fill="#238636"/>
+        <rect x="34" y="78" width="16" height="6" rx="3" fill="#21262d"/>
+        <rect x="54" y="78" width="16" height="6" rx="3" fill="#21262d"/>
+        <rect x="74" y="77" width="10" height="8" rx="4" fill="#30363d"/>
+        <path d="M18 28h4M26 28h8M18 34h14M18 40h18M18 46h22M18 52h6M28 52h6" stroke="#3fb950" stroke-width="2" stroke-linecap="round"/>
+        <rect x="14" y="58" width="68" height="1" fill="#21262d"/>
+        <path d="M18 63h20" stroke="#58a6ff" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <h1>ShellBar</h1>
+      <p class="tagline">
+        A terminal emulator with a configurable command toolbar.
+        Built on Ghostty's VT engine for Linux.
+      </p>
+      <div class="btn-group">
+        <a href="https://github.com/rendergraf/shellbar" class="btn btn-primary">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          View on GitHub
+        </a>
+        <a href="#install" class="btn btn-secondary">Install</a>
+        <a href="#features" class="btn btn-secondary">Features</a>
+      </div>
+      <div class="badges">
+        <img src="https://img.shields.io/badge/C-11-A8B9CC?logo=c&style=flat" alt="C11">
+        <img src="https://img.shields.io/badge/GTK4-4.12+-7FE719?logo=gtk&style=flat" alt="GTK4">
+        <img src="https://img.shields.io/badge/libghostty--vt-VT_Engine-8257D0?logo=ghostty&style=flat" alt="libghostty-vt">
+        <img src="https://img.shields.io/badge/Cairo-Render-F03C15?logo=cairo&style=flat" alt="Cairo">
+        <img src="https://img.shields.io/badge/Pango-Text-EB5E00?logo=pango&style=flat" alt="Pango">
+        <img src="https://img.shields.io/badge/Zig-0.15.2+-F7A41D?logo=zig&style=flat" alt="Zig">
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="container">
+      <h2>Features</h2>
+      <div class="features">
+        <div class="feature">
+          <h3>Configurable Toolbar</h3>
+          <p>Launch any command with a single click. Define buttons in ~/.config/shellbar/config with name, command, and icon.</p>
+        </div>
+        <div class="feature">
+          <h3>Ghostty VT Engine</h3>
+          <p>Full VT100-520 emulation, 256 colors, true color, and Kitty graphics protocol — powered by libghostty-vt.</p>
+        </div>
+        <div class="feature">
+          <h3>Multiple Tabs</h3>
+          <p>Each tab runs its own shell with independent PTY. Dynamic titles via OSC 0/2. Ctrl+T to create new tabs.</p>
+        </div>
+        <div class="feature">
+          <h3>Text Selection &amp; Clipboard</h3>
+          <p>Select text with mouse drag, copy with Ctrl+Shift+C, paste with Ctrl+Shift+V. Right-click context menu included.</p>
+        </div>
+        <div class="feature">
+          <h3>Configurable Keybinds</h3>
+          <p>Customize copy, paste, and select-all shortcuts in the config file using key="c" mods="ctrl+shift" format.</p>
+        </div>
+        <div class="feature">
+          <h3>Hot Reload</h3>
+          <p>Edit your config and send SIGHUP to reload buttons and keybinds instantly — no restart needed.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>How it looks</h2>
+      <div class="terminal-mock">
+        <div class="terminal-header">
+          <div class="terminal-dot red"></div>
+          <div class="terminal-dot yellow"></div>
+          <div class="terminal-dot green"></div>
+          <div class="terminal-title">ShellBar</div>
+        </div>
+        <div class="toolbar-mock">
+          <span class="toolbar-btn">▶ Storybook</span>
+          <span class="toolbar-btn">▶ Build</span>
+          <span class="toolbar-btn">▶ Test</span>
+          <span class="toolbar-btn">▶ Dev</span>
+          <span class="toolbar-btn">▶ Lint</span>
+          <span class="toolbar-btn" style="background:transparent;border:1px solid #30363d;">+</span>
+        </div>
+        <div class="terminal-body">
+          <span class="prompt">~/projects/myapp $ </span><span class="cmd">pnpm storybook</span><br>
+          <span class="output">&gt; storybook@8.0.0 starting...</span><br>
+          <span class="output">&nbsp;&nbsp;Local:   http://localhost:6006</span><br>
+          <span class="output">&nbsp;&nbsp;Network: http://192.168.1.5:6006</span><br>
+          <br>
+          <span class="prompt">~/projects/myapp $ </span><span class="cmd">pnpm test</span><br>
+          <span class="output">&nbsp;✓ src/App.test.tsx</span><br>
+          <span class="output">&nbsp;✓ src/components/Button.test.tsx</span><br>
+          <span class="output">&nbsp;Tests: 42 passed, 42 total</span><br>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="container">
+      <h2>Install</h2>
+      <div class="install-box">
+        <p style="color:#8b949e;font-size:14px;margin-bottom:8px;">Dependencies (Debian/Ubuntu 24.04)</p>
+        <code>sudo apt install build-essential cmake ninja-build libgtk-4-dev libadwaita-1-dev libpango1.0-dev libcairo2-dev git</code>
+        <p style="color:#8b949e;font-size:14px;margin:16px 0 8px;">Build from source</p>
+        <code>git clone https://github.com/rendergraf/shellbar<br>cd shellbar<br>cmake -B build -G Ninja<br>cmake --build build<br>./build/shellbar</code>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container" style="text-align:center;">
+      <h2>Configuration</h2>
+      <p style="color:#8b949e;font-size:14px;max-width:600px;margin:0 auto 24px;">
+        ShellBar uses a <code style="color:#79c0ff;">key = value</code> format compatible with Ghostty.
+        Create <code style="color:#79c0ff;">~/.config/shellbar/config</code> to define your buttons and keybinds.
+      </p>
+      <div class="terminal-mock" style="text-align:left;">
+        <div class="terminal-header">
+          <span style="font-size:12px;color:#8b949e;">~/.config/shellbar/config</span>
+        </div>
+        <div class="terminal-body" style="font-size:13px;">
+          <span style="color:#8b949e;"># Toolbar buttons</span><br>
+          <span style="color:#79c0ff;">toolbar-button</span> = name=<span style="color:#a5d6ff;">"Storybook"</span>, command=<span style="color:#a5d6ff;">"pnpm storybook"</span>, icon=<span style="color:#a5d6ff;">"media-playback-start"</span><br>
+          <span style="color:#79c0ff;">toolbar-button</span> = name=<span style="color:#a5d6ff;">"Build"</span>, command=<span style="color:#a5d6ff;">"pnpm build"</span>, icon=<span style="color:#a5d6ff;">"emblem-system"</span><br>
+          <span style="color:#79c0ff;">toolbar-button</span> = name=<span style="color:#a5d6ff;">"Test"</span>, command=<span style="color:#a5d6ff;">"pnpm test"</span>, icon=<span style="color:#a5d6ff;">"emblem-default"</span><br>
+          <br>
+          <span style="color:#8b949e;"># Keybinds</span><br>
+          <span style="color:#79c0ff;">keybind</span> = action=<span style="color:#a5d6ff;">"copy"</span>, key=<span style="color:#a5d6ff;">"c"</span>, mods=<span style="color:#a5d6ff;">"ctrl+shift"</span><br>
+          <span style="color:#79c0ff;">keybind</span> = action=<span style="color:#a5d6ff;">"paste"</span>, key=<span style="color:#a5d6ff;">"v"</span>, mods=<span style="color:#a5d6ff;">"ctrl+shift"</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <p>
+        <strong>ShellBar v1.0</strong> &mdash; MIT License &copy; 2026
+        <a href="https://github.com/rendergraf">Xavier Araque</a>
+      </p>
+      <p style="margin-top:4px;">
+        Built with <a href="https://github.com/ghostty-org/ghostty">Ghostty</a>'s VT engine &middot;
+        <a href="https://github.com/rendergraf/shellbar">GitHub</a>
+      </p>
+    </div>
+  </footer>
+
+</body>
+</html>
