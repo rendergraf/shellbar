@@ -11,6 +11,7 @@
 #include <signal.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
 
 /* ------------------------------------------------------------------ */
 /* Tab tracking                                                        */
@@ -393,6 +394,10 @@ static void sb_window_class_init(SbWindowClass *klass) {
   oclass->dispose = sb_window_dispose;
 }
 
+static void set_app_icon(GtkWindow *win) {
+  gtk_window_set_icon_name(win, "shellbar");
+}
+
 static gboolean focus_first_tab(gpointer data) {
   SbWindow *self = data;
   AdwTabPage *page = adw_tab_view_get_selected_page(self->tab_view);
@@ -407,6 +412,8 @@ static gboolean focus_first_tab(gpointer data) {
 static void sb_window_init(SbWindow *self) {
   gtk_window_set_default_size(GTK_WINDOW(self), 900, 600);
   gtk_window_set_title(GTK_WINDOW(self), "ShellBar");
+
+  set_app_icon(GTK_WINDOW(self));
 
   AdwStyleManager *sm = adw_style_manager_get_default();
   adw_style_manager_set_color_scheme(sm, ADW_COLOR_SCHEME_FORCE_DARK);
