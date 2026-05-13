@@ -17,11 +17,11 @@ typedef struct {
 } SbDefaultButton;
 
 static const SbDefaultButton default_buttons[] = {
-  { "Storybook", "pnpm storybook\n", "media-playback-start" },
-  { "Build",     "pnpm build\n",     "emblem-system" },
-  { "Test",      "pnpm test\n",      "emblem-default" },
-  { "Dev",       "pnpm dev\n",       "computer" },
-  { "Lint",      "pnpm lint\n",      "emblem-important" },
+  { "Storybook", "pnpm storybook", "media-playback-start" },
+  { "Build",     "pnpm build",     "emblem-system" },
+  { "Test",      "pnpm test",      "emblem-default" },
+  { "Dev",       "pnpm dev",       "computer" },
+  { "Lint",      "pnpm lint",      "emblem-important" },
 };
 static const int default_count = sizeof(default_buttons) / sizeof(default_buttons[0]);
 
@@ -117,7 +117,7 @@ static SbConfigButton parse_button_value(const char *value) {
     while (*p && *p != '=' && *p != ',' && *p != ' ') p++;
     char saved = *p;
     *p = '\0';
-    char *key = key_start;
+    char *key = g_strdup(key_start);
     trim_end(key);
     *p = saved;
     if (*p == '=') p++;
@@ -135,6 +135,7 @@ static SbConfigButton parse_button_value(const char *value) {
       else if (strcmp(key, "icon") == 0) btn.icon = val;
       else g_free(val);
     }
+    g_free(key);
     if (*p == ',') p++;
   }
   g_free(buf);

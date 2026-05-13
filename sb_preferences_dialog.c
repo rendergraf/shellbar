@@ -114,7 +114,7 @@ static void show_edit_dialog(PrefsData *pd, SbConfigButton *target,
   ed->name_entry = GTK_ENTRY(n);
 
   GtkWidget *c = gtk_entry_new();
-  gtk_entry_set_placeholder_text(GTK_ENTRY(c), "Command (e.g. pnpm build\\n)");
+  gtk_entry_set_placeholder_text(GTK_ENTRY(c), "Command (e.g. pnpm build)");
   if (target && target->command) gtk_editable_set_text(GTK_EDITABLE(c), target->command);
   ed->command_entry = GTK_ENTRY(c);
 

@@ -58,8 +58,10 @@ SbToolbar *sb_toolbar_new(void) {
 static void on_button_clicked(GtkButton *button, gpointer user_data) {
   SbToolbar *self = user_data;
   const char *cmd = g_object_get_data(G_OBJECT(button), "sb-command");
-  if (cmd && self->active_terminal)
+  if (cmd && self->active_terminal) {
     sb_terminal_write_str(self->active_terminal, cmd);
+    sb_terminal_write(self->active_terminal, "\n", 1);
+  }
 }
 
 static GtkWidget *sb_toolbar_add_button(SbToolbar *self, const char *name,
