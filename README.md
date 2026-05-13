@@ -2,7 +2,33 @@
 
 > A command-bar terminal emulator built on Ghostty — with a configurable toolbar for launching commands.
 
-**[github.com/rendergraf/shellbar](https://github.com/rendergraf/shellbar)**
+<p align="center">
+  <a href="https://github.com/rendergraf/shellbar"><img src="https://img.shields.io/github/stars/rendergraf/shellbar" alt="GitHub Stars"></a>
+  <a href="https://github.com/rendergraf/shellbar"><img src="https://img.shields.io/github/forks/rendergraf/shellbar" alt="GitHub Forks"></a>
+  <a href="https://github.com/rendergraf/shellbar/blob/master/LICENSE"><img src="https://img.shields.io/github/license/rendergraf/shellbar" alt="MIT License"></a>
+</p>
+
+## Tech Stack
+
+<p align="center">
+  <img src="https://img.shields.io/badge/C-11-A8B9CC?logo=c&style=flat" alt="C11">
+  <img src="https://img.shields.io/badge/GTK4-4.12+-7FE719?logo=gtk&style=flat" alt="GTK4">
+  <img src="https://img.shields.io/badge/libadwaita-1.5+-9A6CEA?logo=gnome&style=flat" alt="libadwaita">
+  <img src="https://img.shields.io/badge/libghostty--vt-VT_Engine-8257D0?logo=ghostty&style=flat" alt="libghostty-vt">
+  <img src="https://img.shields.io/badge/Cairo-Render-F03C15?logo=cairo&style=flat" alt="Cairo">
+  <img src="https://img.shields.io/badge/Pango-Text-EB5E00?logo=pango&style=flat" alt="Pango">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Zig-0.15.2+-F7A41D?logo=zig&style=flat" alt="Zig">
+  <img src="https://img.shields.io/badge/CMake-3.19+-064F8C?logo=cmake&style=flat" alt="CMake">
+  <img src="https://img.shields.io/badge/Ninja-Build-4D4D4D?logo=ninja&style=flat" alt="Ninja">
+  <img src="https://img.shields.io/badge/Wayland-native-FFBC1F?logo=wayland&style=flat" alt="Wayland">
+  <img src="https://img.shields.io/badge/X11-native-ED1944?logo=x.org&style=flat" alt="X11">
+  <img src="https://img.shields.io/badge/Linux-FCC624?logo=linux&style=flat" alt="Linux">
+</p>
+
+## Description
 
 ShellBar is a terminal emulator built on **Ghostty**'s VT engine
 (`libghostty-vt`), with a configurable toolbar that lets you launch
@@ -16,6 +42,10 @@ to run any command on the active terminal.
 
 - Full terminal with VT100-520, 256 colors, true color, Kitty protocol support
 - **Configurable toolbar** with command buttons from `~/.config/shellbar/config`
+- **Text selection** via mouse drag with visual highlight
+- **Copy / Paste** (Ctrl+Shift+C / Ctrl+Shift+V) with GTK clipboard
+- **Right-click context menu**: Copy, Paste, Select All
+- **Configurable keybinds** in config file
 - **Tabs** with `Adw.TabBar` + `Adw.TabView`, each with its own shell
 - Dynamic tab titles (OSC 0/2 from the shell)
 - Visual Ghostty clone (dark theme, GTK4/libadwaita, no window title)
@@ -31,12 +61,12 @@ to run any command on the active terminal.
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| Zig | ≥ 0.15.2 | Build libghostty-vt |
+| Zig | >= 0.15.2 | Build libghostty-vt |
 | C compiler | C11 (gcc/clang) | Build ShellBar |
-| CMake | ≥ 3.19 | Build system |
+| CMake | >= 3.19 | Build system |
 | Ninja | — | Build backend |
-| GTK4 | ≥ 4.12 | GUI toolkit |
-| libadwaita | ≥ 1.5 | Windows, tabs, styles |
+| GTK4 | >= 4.12 | GUI toolkit |
+| libadwaita | >= 1.5 | Windows, tabs, styles |
 | Pango | — | Terminal text |
 | Cairo | — | Terminal rendering |
 | git | — | Fetch libghostty-vt |
@@ -49,12 +79,12 @@ sudo apt install build-essential cmake ninja-build \
   libcairo2-dev git
 ```
 
-Zig: download from https://ziglang.org/download/ (≥ 0.15.2).
+Zig: download from https://ziglang.org/download/ (>= 0.15.2).
 
 ## Building
 
 ```sh
-git clone <repo-url> shellbar
+git clone https://github.com/rendergraf/shellbar
 cd shellbar
 cmake -B build -G Ninja
 cmake --build build
@@ -72,14 +102,18 @@ Format: `key = value` (same as Ghostty):
 
 ```ini
 # Toolbar buttons
-toolbar-button = name="Storybook", command="pnpm storybook\n", icon="media-playback-start"
-toolbar-button = name="Build", command="pnpm build\n", icon="emblem-system"
-toolbar-button = name="Test", command="pnpm test --watch\n", icon="emblem-default"
-toolbar-button = name="Lint", command="pnpm lint --fix\n", icon="emblem-important"
+toolbar-button = name="Storybook", command="pnpm storybook", icon="media-playback-start"
+toolbar-button = name="Build", command="pnpm build", icon="emblem-system"
+toolbar-button = name="Test", command="pnpm test --watch", icon="emblem-default"
+toolbar-button = name="Lint", command="pnpm lint --fix", icon="emblem-important"
+
+# Keybinds
+keybind = action="copy", key="c", mods="ctrl+shift"
+keybind = action="paste", key="v", mods="ctrl+shift"
+keybind = action="select_all", key="a", mods="ctrl+shift"
 ```
 
-If the config file doesn't exist, default buttons are used
-(Storybook, Build, Test, Dev, Lint).
+If the config file doesn't exist, default buttons and keybinds are used.
 
 ### Hot reload
 
@@ -92,8 +126,23 @@ kill -HUP $(pidof shellbar)
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+T` | New tab |
+| `Ctrl+Shift+C` | Copy selection |
+| `Ctrl+Shift+V` | Paste |
+| `Ctrl+Shift+A` | Select all |
 | `Alt+1`..`Alt+9`, `Alt+0` | Execute toolbar buttons 1–10 |
 
+### Keybind configuration
+
+Keybinds are configurable via `~/.config/shellbar/config`:
+
+```ini
+keybind = action="copy", key="c", mods="ctrl+shift"
+keybind = action="paste", key="v", mods="ctrl+shift"
+keybind = action="select_all", key="a", mods="ctrl+shift"
+```
+
+Available actions: `copy`, `paste`, `select_all`.
+Available mods: `ctrl`, `shift`, `alt`, `super` (combined with `+`).
 
 ### Tab architecture
 
@@ -115,19 +164,22 @@ shellbar/
 ├── sb_terminal.c/h      # Terminal: PTY + libghostty-vt + Cairo render + input
 ├── sb_toolbar.c/h       # Toolbar with command buttons
 ├── sb_config.c/h        # Config key=value from ~/.config/shellbar/config
+├── sb_preferences_dialog.c/h # Preferences dialog for editing buttons
 └── README.md            # This file
 ```
 
 ### Keyboard flow
 
 1. `GtkEventControllerKey` on `AdwToolbarView` (capture phase) catches all keys
-2. `Ctrl+T` → new tab; everything else is forwarded to `sb_terminal_handle_key()`
-3. If the key maps to a Ghostty key (`gdk_keyval_to_ghostty`):
+2. `Ctrl+T` → new tab; `Alt+1..0` → toolbar shortcuts
+3. Remaining keys are forwarded to `sb_terminal_handle_key()`
+4. Configurable keybinds are checked first (copy, paste, select_all)
+5. If the key maps to a Ghostty key (`gdk_keyval_to_ghostty`):
    - `ghostty_key_encoder_encode()` produces the escape sequence
    - The result is written to the PTY
-4. If the key does **not** map (symbols like `*`, `!`, `ñ`, `ü`):
+6. If the key does **not** map (symbols like `*`, `!`, `ñ`, `ü`):
    - UTF-8 text is written directly to the PTY via `gdk_keyval_to_unicode()`
-5. If the Ghostty encoder produces no output but UTF-8 text is available,
+7. If the Ghostty encoder produces no output but UTF-8 text is available,
    the text is written directly (fallback)
 
 This approach guarantees compatibility with all keyboard characters

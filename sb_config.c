@@ -25,6 +25,13 @@ static const SbDefaultButton default_buttons[] = {
 };
 static const int default_count = sizeof(default_buttons) / sizeof(default_buttons[0]);
 
+static const SbConfigKeybind default_keybinds[] = {
+  { SB_ACTION_COPY,       GDK_KEY_c, GDK_CONTROL_MASK | GDK_SHIFT_MASK },
+  { SB_ACTION_PASTE,      GDK_KEY_v, GDK_CONTROL_MASK | GDK_SHIFT_MASK },
+  { SB_ACTION_SELECT_ALL, GDK_KEY_a, GDK_CONTROL_MASK | GDK_SHIFT_MASK },
+};
+static const int default_kb_count = sizeof(default_keybinds) / sizeof(default_keybinds[0]);
+
 void sb_config_add_defaults(SbConfig *config) {
   for (int i = 0; i < default_count; i++) {
     config->button_count++;
@@ -34,6 +41,12 @@ void sb_config_add_defaults(SbConfig *config) {
     b->name    = g_strdup(default_buttons[i].name);
     b->command = g_strdup(default_buttons[i].command);
     b->icon    = g_strdup(default_buttons[i].icon);
+  }
+  for (int i = 0; i < default_kb_count; i++) {
+    config->keybind_count++;
+    config->keybinds = g_realloc(config->keybinds,
+      config->keybind_count * sizeof(SbConfigKeybind));
+    config->keybinds[config->keybind_count - 1] = default_keybinds[i];
   }
 }
 
@@ -143,6 +156,88 @@ static SbConfigButton parse_button_value(const char *value) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Keybind helpers                                                      */
+/* ------------------------------------------------------------------ */
+
+static SbAction action_from_name(const char *name) {
+  if (strcmp(name, "copy") == 0)       return SB_ACTION_COPY;
+  if (strcmp(name, "paste") == 0)      return SB_ACTION_PASTE;
+  if (strcmp(name, "select_all") == 0) return SB_ACTION_SELECT_ALL;
+  return SB_ACTION_COUNT;
+}
+
+static GdkModifierType parse_mods(const char *str) {
+  GdkModifierType mods = 0;
+  char *buf = g_strdup(str);
+  char *tok = strtok(buf, "+");
+  while (tok) {
+    char *t = trim_start(tok);
+    trim_end(t);
+    if (strcmp(t, "ctrl") == 0 || strcmp(t, "control") == 0)
+      mods |= GDK_CONTROL_MASK;
+    else if (strcmp(t, "shift") == 0)
+      mods |= GDK_SHIFT_MASK;
+    else if (strcmp(t, "alt") == 0)
+      mods |= GDK_ALT_MASK;
+    else if (strcmp(t, "super") == 0)
+      mods |= GDK_SUPER_MASK;
+    tok = strtok(NULL, "+");
+  }
+  g_free(buf);
+  return mods;
+}
+
+static SbConfigKeybind parse_keybind_value(const char *value) {
+  SbConfigKeybind kb = { SB_ACTION_COUNT, 0, 0 };
+  char *act = NULL, *kname = NULL, *mstr = NULL;
+  char *buf = g_strdup(value);
+  char *p = buf;
+  while (*p) {
+    p = trim_start(p);
+    if (!*p) break;
+    char *key_start = p;
+    while (*p && *p != '=' && *p != ',' && *p != ' ') p++;
+    char saved = *p;
+    *p = '\0';
+    char *key = g_strdup(key_start);
+    trim_end(key);
+    *p = saved;
+    if (*p == '=') p++;
+    p = trim_start(p);
+    char *val = NULL;
+    if (*p == '"') {
+      val = parse_quoted(&p);
+    } else {
+      val = parse_unquoted(&p);
+    }
+    if (val) {
+      if (strcmp(key, "action") == 0)      act = val;
+      else if (strcmp(key, "key") == 0)    kname = val;
+      else if (strcmp(key, "mods") == 0)   mstr = val;
+      else g_free(val);
+    }
+    g_free(key);
+    if (*p == ',') p++;
+  }
+  if (act) {
+    kb.action = action_from_name(act);
+    g_free(act);
+  }
+  if (kname) {
+    kb.keyval = gdk_keyval_from_name(kname);
+    if (kb.keyval == GDK_KEY_VoidSymbol && kname[0] && !kname[1])
+      kb.keyval = gdk_unicode_to_keyval((gunichar)kname[0]);
+    g_free(kname);
+  }
+  if (mstr) {
+    kb.mods = parse_mods(mstr);
+    g_free(mstr);
+  }
+  g_free(buf);
+  return kb;
+}
+
+/* ------------------------------------------------------------------ */
 /* Config loading                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -188,6 +283,14 @@ SbConfig *sb_config_load(void) {
         g_free(btn.command);
         g_free(btn.icon);
       }
+    } else if (strcmp(key, "keybind") == 0) {
+      SbConfigKeybind kb = parse_keybind_value(value);
+      if (kb.action < SB_ACTION_COUNT && kb.keyval != GDK_KEY_VoidSymbol) {
+        config->keybind_count++;
+        config->keybinds = g_realloc(config->keybinds,
+          config->keybind_count * sizeof(SbConfigKeybind));
+        config->keybinds[config->keybind_count - 1] = kb;
+      }
     }
   }
 
@@ -204,7 +307,20 @@ void sb_config_free(SbConfig *config) {
     g_free(config->buttons[i].icon);
   }
   g_free(config->buttons);
+  g_free(config->keybinds);
   g_free(config);
+}
+
+const SbConfigKeybind *sb_config_find_keybind(SbConfig *config, guint keyval,
+                                              GdkModifierType mods) {
+  if (!config) return NULL;
+  for (int i = 0; i < config->keybind_count; i++) {
+    if (config->keybinds[i].keyval == keyval &&
+        config->keybinds[i].mods == (mods & (GDK_CONTROL_MASK |
+           GDK_SHIFT_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)))
+      return &config->keybinds[i];
+  }
+  return NULL;
 }
 
 static void write_quoted(FILE *f, const char *val) {
@@ -240,6 +356,35 @@ void sb_config_save(SbConfig *config) {
     if (b->icon && b->icon[0]) {
       fputs(", icon=", f);
       write_quoted(f, b->icon);
+    }
+    fputc('\n', f);
+  }
+
+  for (int i = 0; i < config->keybind_count; i++) {
+    SbConfigKeybind *kb = &config->keybinds[i];
+    const char *act = "copy";
+    switch (kb->action) {
+      case SB_ACTION_COPY:       act = "copy"; break;
+      case SB_ACTION_PASTE:      act = "paste"; break;
+      case SB_ACTION_SELECT_ALL: act = "select_all"; break;
+      default: continue;
+    }
+    const char *kname = gdk_keyval_name(kb->keyval);
+    if (!kname) continue;
+    char mods_buf[128] = "";
+    if (kb->mods & GDK_CONTROL_MASK) strcat(mods_buf, "ctrl+");
+    if (kb->mods & GDK_SHIFT_MASK)   strcat(mods_buf, "shift+");
+    if (kb->mods & GDK_ALT_MASK)     strcat(mods_buf, "alt+");
+    if (kb->mods & GDK_SUPER_MASK)   strcat(mods_buf, "super+");
+    size_t mlen = strlen(mods_buf);
+    if (mlen > 0) mods_buf[mlen - 1] = '\0';
+    fprintf(f, "keybind = action=");
+    write_quoted(f, act);
+    fputs(", key=", f);
+    write_quoted(f, kname);
+    if (mods_buf[0]) {
+      fputs(", mods=", f);
+      write_quoted(f, mods_buf);
     }
     fputc('\n', f);
   }

@@ -59,7 +59,287 @@ struct _SbTerminal {
 
   SbTerminalTitleCb title_cb;
   void *title_cb_data;
+
+  int sel_start_col, sel_start_row;
+  int sel_end_col, sel_end_row;
+  bool has_selection;
+  bool selecting;
+
+  SbConfigKeybind *keybinds;
+  int keybind_count;
+
+  GtkGesture *drag_gesture;
+  GtkGesture *right_click_gesture;
+
+  GtkWidget *context_menu;
 };
+
+/* ------------------------------------------------------------------ */
+/* Selection helpers                                                    */
+/* ------------------------------------------------------------------ */
+
+static void selection_clear(SbTerminal *self) {
+  self->has_selection = false;
+  self->selecting = false;
+  gtk_widget_queue_draw(self->widget);
+}
+
+static void selection_from_cell_coords(SbTerminal *self,
+                                        int col_a, int row_a,
+                                        int col_b, int row_b) {
+  if (col_a < col_b || (col_a == col_b && row_a < row_b)) {
+    self->sel_start_col = col_a; self->sel_start_row = row_a;
+    self->sel_end_col = col_b;   self->sel_end_row = row_b;
+  } else {
+    self->sel_start_col = col_b; self->sel_start_row = row_b;
+    self->sel_end_col = col_a;   self->sel_end_row = row_a;
+  }
+  if (self->sel_start_col < 0) self->sel_start_col = 0;
+  if (self->sel_start_row < 0) self->sel_start_row = 0;
+  if (self->sel_end_col >= (int)self->cols) self->sel_end_col = self->cols - 1;
+  if (self->sel_end_row >= (int)self->rows) self->sel_end_row = self->rows - 1;
+  self->has_selection = true;
+}
+
+static bool cell_is_selected(SbTerminal *self, int col, int row) {
+  if (!self->has_selection) return false;
+  if (row < self->sel_start_row || row > self->sel_end_row) return false;
+  if (row == self->sel_start_row && col < self->sel_start_col) return false;
+  if (row == self->sel_end_row && col > self->sel_end_col) return false;
+  return true;
+}
+
+static char *selection_get_text(SbTerminal *self) {
+  if (!self->has_selection) return NULL;
+
+  GString *result = g_string_new("");
+  int prev_row = -1;
+
+  if (ghostty_render_state_get(self->render_state,
+        GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &self->row_iter)
+      != GHOSTTY_SUCCESS)
+    return g_string_free(result, FALSE);
+
+  int row_idx = 0;
+  while (ghostty_render_state_row_iterator_next(self->row_iter)) {
+    if (row_idx < self->sel_start_row) { row_idx++; continue; }
+    if (row_idx > self->sel_end_row) break;
+
+    if (ghostty_render_state_row_get(self->row_iter,
+          GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, &self->cells)
+        != GHOSTTY_SUCCESS) { row_idx++; continue; }
+
+    if (prev_row >= 0 && prev_row != row_idx - 1)
+      g_string_append_c(result, '\n');
+    else if (prev_row >= 0)
+      g_string_append_c(result, '\n');
+
+    int col_idx = 0;
+    int last_selected_col = -1;
+    while (ghostty_render_state_row_cells_next(self->cells)) {
+      if (col_idx < self->sel_start_col && row_idx == self->sel_start_row)
+        { col_idx++; continue; }
+      if (col_idx > self->sel_end_col && row_idx == self->sel_end_row)
+        break;
+      if (!cell_is_selected(self, col_idx, row_idx))
+        { col_idx++; continue; }
+
+      uint32_t grapheme_len = 0;
+      ghostty_render_state_row_cells_get(self->cells,
+        GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN, &grapheme_len);
+
+      if (grapheme_len > 0) {
+        last_selected_col = col_idx;
+        uint32_t codepoints[16];
+        uint32_t len = grapheme_len < 16 ? grapheme_len : 16;
+        ghostty_render_state_row_cells_get(self->cells,
+          GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF, codepoints);
+        for (uint32_t i = 0; i < len; i++) {
+          char utf8[8] = {0};
+          int n = g_unichar_to_utf8((gunichar)codepoints[i], utf8);
+          if (n > 0) g_string_append_len(result, utf8, n);
+        }
+      }
+      col_idx++;
+    }
+    if (last_selected_col < self->sel_end_col && row_idx == self->sel_end_row) {
+      /* already covered by the check above */
+    }
+    prev_row = row_idx;
+    row_idx++;
+  }
+
+  if (result->len == 0) {
+    g_string_free(result, TRUE);
+    return NULL;
+  }
+  return g_string_free(result, FALSE);
+}
+
+/* ------------------------------------------------------------------ */
+/* Clipboard helpers                                                    */
+/* ------------------------------------------------------------------ */
+
+static void copy_to_clipboard(SbTerminal *self) {
+  char *text = selection_get_text(self);
+  if (!text) return;
+  GdkClipboard *clipboard = gtk_widget_get_clipboard(self->widget);
+  gdk_clipboard_set_text(clipboard, text);
+  g_free(text);
+}
+
+static void paste_callback(GObject *source, GAsyncResult *result,
+                           gpointer user_data) {
+  SbTerminal *self = user_data;
+  GdkClipboard *clipboard = GDK_CLIPBOARD(source);
+  GError *error = NULL;
+  char *text = gdk_clipboard_read_text_finish(clipboard, result, &error);
+  if (text) {
+    bool bracketed = false;
+    ghostty_terminal_mode_get(self->terminal,
+      GHOSTTY_MODE_BRACKETED_PASTE, &bracketed);
+    if (bracketed) {
+      char buf[65536];
+      size_t written = 0;
+      ghostty_paste_encode(text, strlen(text), true,
+                          buf, sizeof(buf), &written);
+      if (written > 0)
+        sb_terminal_write(self, buf, written);
+    } else {
+      sb_terminal_write_str(self, text);
+    }
+    g_free(text);
+  }
+  g_clear_error(&error);
+}
+
+static void paste_from_clipboard(SbTerminal *self) {
+  GdkClipboard *clipboard = gtk_widget_get_clipboard(self->widget);
+  gdk_clipboard_read_text_async(clipboard, NULL, paste_callback, self);
+}
+
+/* ------------------------------------------------------------------ */
+/* Context menu                                                         */
+/* ------------------------------------------------------------------ */
+
+static void menu_copy(GtkWidget *item, gpointer user_data) {
+  (void)item;
+  copy_to_clipboard((SbTerminal *)user_data);
+}
+
+static void menu_paste(GtkWidget *item, gpointer user_data) {
+  (void)item;
+  paste_from_clipboard((SbTerminal *)user_data);
+}
+
+static void menu_select_all(GtkWidget *item, gpointer user_data) {
+  (void)item;
+  sb_terminal_select_all((SbTerminal *)user_data);
+}
+
+static GtkWidget *create_context_menu(SbTerminal *self) {
+  GMenu *menu = g_menu_new();
+
+  g_menu_append(menu, "Copy", "menu.copy");
+  g_menu_append(menu, "Paste", "menu.paste");
+  g_menu_append(menu, "Select All", "menu.selectall");
+
+  GtkWidget *popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu));
+  g_object_unref(menu);
+  gtk_widget_set_parent(popover, self->widget);
+
+  GSimpleActionGroup *actions = g_simple_action_group_new();
+  GActionEntry entries[] = {
+    { "copy",   NULL, NULL, NULL, NULL, {0} },
+    { "paste",  NULL, NULL, NULL, NULL, {0} },
+    { "selectall", NULL, NULL, NULL, NULL, {0} },
+  };
+  g_action_map_add_action_entries(G_ACTION_MAP(actions), entries,
+    G_N_ELEMENTS(entries), self);
+  gtk_widget_insert_action_group(self->widget, "menu",
+                                  G_ACTION_GROUP(actions));
+  g_object_unref(actions);
+
+  g_signal_connect(self->widget, "action-activated::menu.copy",
+                   G_CALLBACK(menu_copy), self);
+  g_signal_connect(self->widget, "action-activated::menu.paste",
+                   G_CALLBACK(menu_paste), self);
+  g_signal_connect(self->widget, "action-activated::menu.selectall",
+                   G_CALLBACK(menu_select_all), self);
+
+  return popover;
+}
+
+/* ------------------------------------------------------------------ */
+/* Mouse gesture callbacks                                              */
+/* ------------------------------------------------------------------ */
+
+static void drag_begin(GtkGestureDrag *gesture, double x, double y,
+                       gpointer user_data) {
+  SbTerminal *self = user_data;
+  (void)gesture;
+  self->selecting = true;
+  int col = (int)((x - self->padding) / self->cell_width);
+  int row = (int)((y - self->padding) / self->cell_height);
+  if (col < 0) col = 0;
+  if (row < 0) row = 0;
+  if (col >= (int)self->cols) col = self->cols - 1;
+  if (row >= (int)self->rows) row = self->rows - 1;
+  self->sel_start_col = self->sel_end_col = col;
+  self->sel_start_row = self->sel_end_row = row;
+  self->has_selection = false;
+}
+
+static void drag_update(GtkGestureDrag *gesture, double offset_x,
+                        double offset_y, gpointer user_data) {
+  SbTerminal *self = user_data;
+  if (!self->selecting) return;
+  double sx, sy;
+  gtk_gesture_drag_get_start_point(GTK_GESTURE_DRAG(gesture), &sx, &sy);
+  double cx = sx + offset_x;
+  double cy = sy + offset_y;
+  int col = (int)((cx - self->padding) / self->cell_width);
+  int row = (int)((cy - self->padding) / self->cell_height);
+  if (col < 0) col = 0;
+  if (row < 0) row = 0;
+  if (col >= (int)self->cols) col = self->cols - 1;
+  if (row >= (int)self->rows) row = self->rows - 1;
+  selection_from_cell_coords(self, self->sel_start_col, self->sel_start_row,
+                             col, row);
+  gtk_widget_queue_draw(self->widget);
+}
+
+static void drag_end(GtkGestureDrag *gesture, double offset_x,
+                     double offset_y, gpointer user_data) {
+  SbTerminal *self = user_data;
+  (void)gesture;
+  if (!self->selecting) return;
+  double sx, sy;
+  gtk_gesture_drag_get_start_point(GTK_GESTURE_DRAG(gesture), &sx, &sy);
+  double cx = sx + offset_x;
+  double cy = sy + offset_y;
+  int col = (int)((cx - self->padding) / self->cell_width);
+  int row = (int)((cy - self->padding) / self->cell_height);
+  if (col < 0) col = 0;
+  if (row < 0) row = 0;
+  if (col >= (int)self->cols) col = self->cols - 1;
+  if (row >= (int)self->rows) row = self->rows - 1;
+  selection_from_cell_coords(self, self->sel_start_col, self->sel_start_row,
+                             col, row);
+  self->selecting = false;
+  gtk_widget_queue_draw(self->widget);
+}
+
+static void right_click_pressed(GtkGestureClick *gesture, int n_press,
+                                double x, double y, gpointer user_data) {
+  SbTerminal *self = user_data;
+  (void)n_press;
+  if (!self->context_menu)
+    self->context_menu = create_context_menu(self);
+  GdkRectangle rect = { (int)x, (int)y, 1, 1 };
+  gtk_popover_set_pointing_to(GTK_POPOVER(self->context_menu), &rect);
+  gtk_popover_popup(GTK_POPOVER(self->context_menu));
+}
 
 /* ------------------------------------------------------------------ */
 /* PTY helpers                                                         */
@@ -307,6 +587,20 @@ gboolean sb_terminal_handle_key(SbTerminal *self, guint keyval,
                                 guint keycode, GdkModifierType state) {
   (void)keycode;
 
+  for (int i = 0; i < self->keybind_count; i++) {
+    if (self->keybinds[i].keyval == keyval &&
+        self->keybinds[i].mods == (state & (GDK_CONTROL_MASK |
+           GDK_SHIFT_MASK | GDK_ALT_MASK | GDK_SUPER_MASK))) {
+      switch (self->keybinds[i].action) {
+        case SB_ACTION_COPY:       copy_to_clipboard(self); break;
+        case SB_ACTION_PASTE:      paste_from_clipboard(self); break;
+        case SB_ACTION_SELECT_ALL: sb_terminal_select_all(self); break;
+        default: break;
+      }
+      return GDK_EVENT_STOP;
+    }
+  }
+
   static char sb_utf8[8] = {0};
   bool have_utf8 = false;
   gunichar uc = gdk_keyval_to_unicode(keyval);
@@ -489,13 +783,17 @@ static void render_terminal(GtkDrawingArea *area, cairo_t *cr,
   pango_layout_set_font_description(layout, self->font_desc);
 
   int y = self->padding;
+  int row_idx = 0;
   while (ghostty_render_state_row_iterator_next(self->row_iter)) {
     if (ghostty_render_state_row_get(self->row_iter,
           GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, &self->cells)
-        != GHOSTTY_SUCCESS)
+        != GHOSTTY_SUCCESS) {
+      row_idx++;
       continue;
+    }
 
     int x = self->padding;
+    int col_idx = 0;
     while (ghostty_render_state_row_cells_next(self->cells)) {
       uint32_t grapheme_len = 0;
       ghostty_render_state_row_cells_get(self->cells,
@@ -512,7 +810,13 @@ static void render_terminal(GtkDrawingArea *area, cairo_t *cr,
           cairo_set_source_rgb(cr, bg.r / 255.0, bg.g / 255.0, bg.b / 255.0);
           cairo_fill(cr);
         }
+        if (cell_is_selected(self, col_idx, row_idx)) {
+          cairo_rectangle(cr, x, y, self->cell_width, self->cell_height);
+          cairo_set_source_rgba(cr, 0.30, 0.55, 0.85, 0.35);
+          cairo_fill(cr);
+        }
         x += self->cell_width;
+        col_idx++;
         continue;
       }
 
@@ -577,7 +881,14 @@ static void render_terminal(GtkDrawingArea *area, cairo_t *cr,
         pango_cairo_show_layout(cr, layout);
       }
 
+      if (cell_is_selected(self, col_idx, row_idx)) {
+        cairo_rectangle(cr, x, y, self->cell_width, self->cell_height);
+        cairo_set_source_rgba(cr, 0.30, 0.55, 0.85, 0.35);
+        cairo_fill(cr);
+      }
+
       x += self->cell_width;
+      col_idx++;
     }
 
     /* Clear per-row dirty */
@@ -585,6 +896,7 @@ static void render_terminal(GtkDrawingArea *area, cairo_t *cr,
     ghostty_render_state_row_set(self->row_iter,
       GHOSTTY_RENDER_STATE_ROW_OPTION_DIRTY, &clean);
     y += self->cell_height;
+    row_idx++;
   }
 
   /* Draw cursor */
@@ -759,6 +1071,30 @@ SbTerminal *sb_terminal_new(void) {
     G_CALLBACK(on_scroll), self);
   gtk_widget_add_controller(self->widget, scroll_controller);
 
+  /* Drag gesture for text selection */
+  self->drag_gesture = GTK_GESTURE(gtk_gesture_drag_new());
+  gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(self->drag_gesture),
+                                GDK_BUTTON_PRIMARY);
+  g_signal_connect(self->drag_gesture, "drag-begin",
+                   G_CALLBACK(drag_begin), self);
+  g_signal_connect(self->drag_gesture, "drag-update",
+                   G_CALLBACK(drag_update), self);
+  g_signal_connect(self->drag_gesture, "drag-end",
+                   G_CALLBACK(drag_end), self);
+  gtk_widget_add_controller(self->widget,
+                             GTK_EVENT_CONTROLLER(self->drag_gesture));
+
+  /* Right-click gesture for context menu */
+  self->right_click_gesture = GTK_GESTURE(gtk_gesture_click_new());
+  gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(self->right_click_gesture),
+                                GDK_BUTTON_SECONDARY);
+  g_signal_connect(self->right_click_gesture, "pressed",
+                   G_CALLBACK(right_click_pressed), self);
+  gtk_widget_add_controller(self->widget,
+                             GTK_EVENT_CONTROLLER(self->right_click_gesture));
+
+  self->context_menu = NULL;
+
   /* Cursor blink timer (every 500ms) */
   self->cursor_timer = g_timeout_add(500, on_cursor_tick, self);
 
@@ -779,6 +1115,11 @@ void sb_terminal_free(SbTerminal *self) {
 
   if (self->child_pid > 0)
     kill(self->child_pid, SIGTERM);
+
+  if (self->context_menu)
+    gtk_widget_unparent(self->context_menu);
+
+  g_free(self->keybinds);
 
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(self->widget),
     NULL, NULL, NULL);
@@ -816,4 +1157,29 @@ void sb_terminal_write_str(SbTerminal *self, const char *str) {
 void sb_terminal_set_title_callback(SbTerminal *self, SbTerminalTitleCb cb, void *userdata) {
   self->title_cb = cb;
   self->title_cb_data = userdata;
+}
+
+void sb_terminal_copy(SbTerminal *self) {
+  copy_to_clipboard(self);
+}
+
+void sb_terminal_paste(SbTerminal *self) {
+  paste_from_clipboard(self);
+}
+
+void sb_terminal_select_all(SbTerminal *self) {
+  self->sel_start_col = 0;
+  self->sel_start_row = 0;
+  self->sel_end_col = self->cols - 1;
+  self->sel_end_row = self->rows - 1;
+  self->has_selection = true;
+  gtk_widget_queue_draw(self->widget);
+}
+
+void sb_terminal_set_keybinds(SbTerminal *self, const SbConfigKeybind *keybinds,
+                              int count) {
+  g_free(self->keybinds);
+  self->keybind_count = count;
+  self->keybinds = g_malloc(count * sizeof(SbConfigKeybind));
+  memcpy(self->keybinds, keybinds, count * sizeof(SbConfigKeybind));
 }

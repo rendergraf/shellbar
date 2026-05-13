@@ -38,6 +38,8 @@ struct _SbWindow {
   int tab_capacity;
   char *shortcut_cmds[MAX_SHORTCUTS];
   int shortcut_count;
+  SbConfigKeybind *config_keybinds;
+  int config_keybind_count;
 };
 
 G_DEFINE_TYPE(SbWindow, sb_window, ADW_TYPE_APPLICATION_WINDOW)
@@ -142,6 +144,9 @@ static void add_tab(SbWindow *self) {
 
   SbTerminal *term = sb_terminal_new();
   sb_terminal_set_title_callback(term, on_terminal_title, self);
+  if (self->config_keybind_count > 0)
+    sb_terminal_set_keybinds(term, self->config_keybinds,
+                             self->config_keybind_count);
 
   GtkWidget *child = sb_terminal_get_widget(term);
   gtk_widget_set_vexpand(child, TRUE);
@@ -281,6 +286,13 @@ static void update_shortcuts(SbWindow *self, const SbToolbarButtonDef *defs,
   self->shortcut_count = n;
 }
 
+static void propagate_keybinds(SbWindow *self) {
+  for (int i = 0; i < self->tab_count; i++)
+    sb_terminal_set_keybinds(self->tabs[i].terminal,
+                             self->config_keybinds,
+                             self->config_keybind_count);
+}
+
 static void reload_buttons(SbWindow *self) {
   SbConfig *config = sb_config_load();
 
@@ -304,6 +316,14 @@ static void reload_buttons(SbWindow *self) {
     sb_toolbar_set_buttons(self->toolbar, NULL, 0);
     update_shortcuts(self, NULL, 0);
   }
+
+  g_free(self->config_keybinds);
+  self->config_keybind_count = config->keybind_count;
+  self->config_keybinds = g_malloc(
+    config->keybind_count * sizeof(SbConfigKeybind));
+  memcpy(self->config_keybinds, config->keybinds,
+         config->keybind_count * sizeof(SbConfigKeybind));
+  propagate_keybinds(self);
 
   sb_config_free(config);
 }
@@ -355,6 +375,10 @@ static void sb_window_dispose(GObject *object) {
   for (int i = 0; i < self->shortcut_count; i++)
     g_free(self->shortcut_cmds[i]);
   self->shortcut_count = 0;
+
+  g_free(self->config_keybinds);
+  self->config_keybinds = NULL;
+  self->config_keybind_count = 0;
 
   if (self->toolbar) {
     sb_toolbar_free(self->toolbar);

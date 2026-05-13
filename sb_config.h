@@ -8,6 +8,13 @@
 
 #include <gtk/gtk.h>
 
+typedef enum {
+  SB_ACTION_COPY,
+  SB_ACTION_PASTE,
+  SB_ACTION_SELECT_ALL,
+  SB_ACTION_COUNT
+} SbAction;
+
 typedef struct {
   char *name;
   char *command;
@@ -15,13 +22,23 @@ typedef struct {
 } SbConfigButton;
 
 typedef struct {
+  SbAction action;
+  guint keyval;
+  GdkModifierType mods;
+} SbConfigKeybind;
+
+typedef struct {
   SbConfigButton *buttons;
   int button_count;
+  SbConfigKeybind *keybinds;
+  int keybind_count;
 } SbConfig;
 
 SbConfig *sb_config_load(void);
 void sb_config_save(SbConfig *config);
 void sb_config_free(SbConfig *config);
 void sb_config_add_defaults(SbConfig *config);
+const SbConfigKeybind *sb_config_find_keybind(SbConfig *config, guint keyval,
+                                              GdkModifierType mods);
 
 #endif
