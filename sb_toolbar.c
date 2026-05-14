@@ -29,7 +29,7 @@ SbToolbar *sb_toolbar_new(void) {
   gtk_css_provider_load_from_string(provider,
     ".sb-toolbar {"
     "  background-color: rgba(30, 30, 30, 0.95);"
-    "  border-bottom: 1px solid rgba(255, 255, 255, 0.08);"
+    "  border-top: 1px solid rgba(255, 255, 255, 0.08);"
     "}"
     ".sb-toolbar button {"
     "  background-color: rgba(255, 255, 255, 0.06);"

@@ -29,6 +29,7 @@ add_executable(shellbar
   sb_toolbar.c
   sb_config.c
   sb_preferences_dialog.c
+  sb_theme.c
 )
 
 add_custom_command(

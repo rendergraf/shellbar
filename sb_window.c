@@ -7,6 +7,7 @@
 #include "sb_toolbar.h"
 #include "sb_config.h"
 #include "sb_preferences_dialog.h"
+#include "sb_theme.h"
 
 #include <signal.h>
 #include <string.h>
@@ -20,6 +21,9 @@
 typedef struct {
   SbTerminal *terminal;
   AdwTabPage *page;
+  GtkWidget *tab_button;
+  GtkWidget *tab_close_btn;
+  GtkWidget *tab_row;
 } SbTabEntry;
 
 /* ------------------------------------------------------------------ */
@@ -32,8 +36,11 @@ struct _SbWindow {
   AdwApplicationWindow parent;
   SbToolbar *toolbar;
   AdwTabView *tab_view;
-  AdwTabBar *tab_bar;
+  GtkWidget *tab_bar_box;
+  GtkWidget *tab_bar_scroll;
+  GtkWidget *tab_add_btn;
   GtkWidget *toolbar_view;
+  GtkWidget *toolbar_revealer;
   SbTabEntry *tabs;
   int tab_count;
   int tab_capacity;
@@ -65,23 +72,6 @@ static int tab_index_of(SbWindow *self, AdwTabPage *page) {
   return -1;
 }
 
-/* Toggle close buttons: hide when only 1 tab */
-static void toggle_buttons_recursive(GtkWidget *w, gboolean show) {
-  if (GTK_IS_BUTTON(w)) {
-    gtk_widget_set_visible(w, show);
-    return;
-  }
-  GtkWidget *c = gtk_widget_get_first_child(w);
-  while (c) {
-    toggle_buttons_recursive(c, show);
-    c = gtk_widget_get_next_sibling(c);
-  }
-}
-
-static void update_tab_close_visibility(SbWindow *self) {
-  toggle_buttons_recursive(GTK_WIDGET(self->tab_bar), self->tab_count > 1);
-}
-
 static SbTerminal *active_terminal(SbWindow *self) {
   AdwTabPage *page = adw_tab_view_get_selected_page(self->tab_view);
   if (!page) return NULL;
@@ -96,8 +86,8 @@ static void on_terminal_title(SbTerminal *terminal, const char *title,
   SbWindow *self = userdata;
   for (int i = 0; i < self->tab_count; i++) {
     if (self->tabs[i].terminal == terminal) {
-      adw_tab_page_set_title(self->tabs[i].page, title);
-      adw_tab_page_set_tooltip(self->tabs[i].page, title);
+      gtk_button_set_label(GTK_BUTTON(self->tabs[i].tab_button), title);
+      gtk_widget_set_tooltip_text(self->tabs[i].tab_button, title);
       return;
     }
   }
@@ -105,11 +95,51 @@ static void on_terminal_title(SbTerminal *terminal, const char *title,
 
 /* ---- Tab management ---- */
 
+static void sync_tab_close_visibility(SbWindow *self) {
+  gboolean show = self->tab_count > 1;
+  for (int i = 0; i < self->tab_count; i++) {
+    if (self->tabs[i].tab_close_btn && GTK_IS_WIDGET(self->tabs[i].tab_close_btn))
+      gtk_widget_set_visible(self->tabs[i].tab_close_btn, show);
+  }
+}
+
+static void on_tab_close_clicked(GtkButton *btn, gpointer userdata) {
+  SbWindow *self = userdata;
+  for (int i = 0; i < self->tab_count; i++) {
+    if (self->tabs[i].tab_close_btn == GTK_WIDGET(btn)) {
+      adw_tab_view_close_page(self->tab_view, self->tabs[i].page);
+      return;
+    }
+  }
+}
+
+static void on_tab_button_toggled(GtkToggleButton *btn, gpointer userdata);
+
 static void on_tab_switch(AdwTabView *view, GParamSpec *pspec,
                           gpointer userdata) {
   SbWindow *self = userdata;
   (void)view;
   (void)pspec;
+
+  AdwTabPage *sel = adw_tab_view_get_selected_page(self->tab_view);
+  for (int i = 0; i < self->tab_count; i++) {
+    if (!self->tabs[i].tab_button || !GTK_IS_TOGGLE_BUTTON(self->tabs[i].tab_button))
+      continue;
+    gboolean active = (self->tabs[i].page == sel);
+    g_signal_handlers_block_by_func(self->tabs[i].tab_button,
+      G_CALLBACK(on_tab_button_toggled), self);
+    gtk_toggle_button_set_active(
+      GTK_TOGGLE_BUTTON(self->tabs[i].tab_button), active);
+    g_signal_handlers_unblock_by_func(self->tabs[i].tab_button,
+      G_CALLBACK(on_tab_button_toggled), self);
+    if (self->tabs[i].tab_row) {
+      if (active)
+        gtk_widget_add_css_class(self->tabs[i].tab_row, "active");
+      else
+        gtk_widget_remove_css_class(self->tabs[i].tab_row, "active");
+    }
+  }
+
   SbTerminal *term = active_terminal(self);
   if (term) sb_toolbar_set_active_terminal(self->toolbar, term);
 }
@@ -124,13 +154,14 @@ static gboolean on_close_page(AdwTabView *view, AdwTabPage *page,
   int idx = tab_index_of(self, page);
   if (idx < 0) return GDK_EVENT_PROPAGATE;
 
+  gtk_box_remove(GTK_BOX(self->tab_bar_box), self->tabs[idx].tab_row);
   sb_terminal_free(self->tabs[idx].terminal);
   if (idx < self->tab_count - 1)
     memmove(&self->tabs[idx], &self->tabs[idx + 1],
             (self->tab_count - idx - 1) * sizeof(SbTabEntry));
   self->tab_count--;
 
-  update_tab_close_visibility(self);
+  sync_tab_close_visibility(self);
 
   (void)view;
   return GDK_EVENT_PROPAGATE; /* let AdwTabView finish closing the page */
@@ -145,6 +176,7 @@ static void add_tab(SbWindow *self) {
 
   SbTerminal *term = sb_terminal_new();
   sb_terminal_set_title_callback(term, on_terminal_title, self);
+  sb_terminal_apply_theme(term, sb_theme_default());
   if (self->config_keybind_count > 0)
     sb_terminal_set_keybinds(term, self->config_keybinds,
                              self->config_keybind_count);
@@ -154,16 +186,45 @@ static void add_tab(SbWindow *self) {
   gtk_widget_set_hexpand(child, TRUE);
 
   AdwTabPage *page = adw_tab_view_append(self->tab_view, child);
-  adw_tab_page_set_title(page, "Terminal");
+
+  GtkWidget *tab_btn = gtk_toggle_button_new_with_label("Terminal");
+  gtk_widget_set_hexpand(tab_btn, FALSE);
+  gtk_widget_add_css_class(tab_btn, "flat");
+  gtk_widget_add_css_class(tab_btn, "sb-tab-button");
+  g_signal_connect(tab_btn, "toggled", G_CALLBACK(on_tab_button_toggled), self);
+
+  GtkWidget *close_btn = gtk_button_new_from_icon_name("window-close-symbolic");
+  gtk_widget_set_hexpand(close_btn, FALSE);
+  gtk_widget_set_valign(close_btn, GTK_ALIGN_CENTER);
+  gtk_widget_add_css_class(close_btn, "flat");
+  gtk_widget_add_css_class(close_btn, "circular");
+  gtk_widget_add_css_class(close_btn, "sb-tab-close");
+  gtk_widget_set_tooltip_text(close_btn, "Close Tab");
+  g_signal_connect(close_btn, "clicked", G_CALLBACK(on_tab_close_clicked), self);
+
+  GtkWidget *tab_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_widget_add_css_class(tab_row, "sb-tab-row");
+  gtk_box_append(GTK_BOX(tab_row), tab_btn);
+  gtk_box_append(GTK_BOX(tab_row), close_btn);
+
+  GtkWidget *prev = gtk_widget_get_prev_sibling(self->tab_add_btn);
+  if (prev)
+    gtk_box_insert_child_after(GTK_BOX(self->tab_bar_box), tab_row, prev);
+  else
+    gtk_box_prepend(GTK_BOX(self->tab_bar_box), tab_row);
 
   SbTabEntry *ent = &self->tabs[self->tab_count++];
   ent->terminal = term;
   ent->page = page;
+  ent->tab_button = tab_btn;
+  ent->tab_close_btn = close_btn;
+  ent->tab_row = tab_row;
 
   adw_tab_view_set_selected_page(self->tab_view, page);
   sb_toolbar_set_active_terminal(self->toolbar, term);
   gtk_widget_grab_focus(child);
-  update_tab_close_visibility(self);
+
+  sync_tab_close_visibility(self);
 }
 
 /* ---- Shortcut: run toolbar command by index ---- */
@@ -215,6 +276,27 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller,
 }
 
 /* ---- GActions for menu ---- */
+
+static void on_tab_button_toggled(GtkToggleButton *btn, gpointer userdata) {
+  SbWindow *self = userdata;
+  if (!gtk_toggle_button_get_active(btn)) return;
+
+  for (int i = 0; i < self->tab_count; i++) {
+    if (self->tabs[i].tab_button == GTK_WIDGET(btn)) {
+      if (self->tabs[i].page)
+        adw_tab_view_set_selected_page(self->tab_view, self->tabs[i].page);
+      return;
+    }
+  }
+}
+
+static void on_toolbar_toggle(GtkButton *button, gpointer userdata) {
+  (void)button;
+  SbWindow *self = userdata;
+  gboolean visible = gtk_revealer_get_reveal_child(
+    GTK_REVEALER(self->toolbar_revealer));
+  gtk_revealer_set_reveal_child(GTK_REVEALER(self->toolbar_revealer), !visible);
+}
 
 static void on_new_tab_clicked(GtkButton *button, gpointer userdata) {
   (void)button;
@@ -413,6 +495,14 @@ static gboolean focus_first_tab(gpointer data) {
   return G_SOURCE_REMOVE;
 }
 
+static void
+create_menu_popup(GtkMenuButton *button, gpointer user_data) {
+  GMenuModel *model = G_MENU_MODEL(user_data);
+  GtkWidget *popover = gtk_popover_menu_new_from_model(model);
+  gtk_popover_set_position(GTK_POPOVER(popover), GTK_POS_TOP);
+  gtk_menu_button_set_popover(button, popover);
+}
+
 static void sb_window_init(SbWindow *self) {
   gtk_window_set_default_size(GTK_WINDOW(self), 900, 600);
   gtk_window_set_title(GTK_WINDOW(self), "ShellBar");
@@ -422,6 +512,10 @@ static void sb_window_init(SbWindow *self) {
   AdwStyleManager *sm = adw_style_manager_get_default();
   adw_style_manager_set_color_scheme(sm, ADW_COLOR_SCHEME_FORCE_DARK);
 
+  /* ---- Theme (chrome CSS) ---- */
+  sb_theme_apply_to_display(gtk_widget_get_display(GTK_WIDGET(self)),
+                            sb_theme_default());
+
   /* ---- GActions (window-level) ---- */
   g_action_map_add_action_entries(G_ACTION_MAP(self),
     win_actions, G_N_ELEMENTS(win_actions), self);
@@ -430,6 +524,15 @@ static void sb_window_init(SbWindow *self) {
   self->toolbar = sb_toolbar_new();
   reload_buttons(self);
 
+  /* ---- Toolbar revealer (hidden by default, slides up from bottom) ---- */
+  self->toolbar_revealer = gtk_revealer_new();
+  gtk_revealer_set_transition_type(GTK_REVEALER(self->toolbar_revealer),
+                                    GTK_REVEALER_TRANSITION_TYPE_SLIDE_UP);
+  gtk_revealer_set_transition_duration(GTK_REVEALER(self->toolbar_revealer), 250);
+  gtk_revealer_set_reveal_child(GTK_REVEALER(self->toolbar_revealer), FALSE);
+  gtk_revealer_set_child(GTK_REVEALER(self->toolbar_revealer),
+                          sb_toolbar_get_widget(self->toolbar));
+
   /* ---- Tab view ---- */
   self->tab_view = ADW_TAB_VIEW(adw_tab_view_new());
   g_signal_connect(self->tab_view, "notify::selected-page",
@@ -437,43 +540,157 @@ static void sb_window_init(SbWindow *self) {
   g_signal_connect(self->tab_view, "close-page",
     G_CALLBACK(on_close_page), self);
 
-  /* ---- Tab bar ---- */
-  self->tab_bar = ADW_TAB_BAR(adw_tab_bar_new());
-  adw_tab_bar_set_view(self->tab_bar, self->tab_view);
-  adw_tab_bar_set_autohide(self->tab_bar, FALSE);
+  /* ---- Custom tab bar (GtkBox in GtkScrolledWindow) ---- */
+  self->tab_bar_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
+  gtk_widget_set_valign(self->tab_bar_box, GTK_ALIGN_CENTER);
+  gtk_widget_set_hexpand(self->tab_bar_box, TRUE);
 
-  /* ---- Header bar ---- */
-  GtkWidget *header = adw_header_bar_new();
-  adw_header_bar_set_show_title(ADW_HEADER_BAR(header), FALSE);
-  adw_header_bar_set_decoration_layout(ADW_HEADER_BAR(header),
-    ":minimize,maximize,close");
+  self->tab_bar_scroll = gtk_scrolled_window_new();
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(self->tab_bar_scroll),
+    GTK_POLICY_AUTOMATIC, GTK_POLICY_NEVER);
+  gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(self->tab_bar_scroll), FALSE);
+  gtk_scrolled_window_set_min_content_height(
+    GTK_SCROLLED_WINDOW(self->tab_bar_scroll), 32);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(self->tab_bar_scroll),
+                                self->tab_bar_box);
+  gtk_widget_set_size_request(self->tab_bar_scroll, -1, 34);
+  gtk_widget_set_valign(self->tab_bar_scroll, GTK_ALIGN_CENTER);
 
-  /* New tab button */
-  GtkWidget *new_btn = gtk_button_new_with_label("+");
-  gtk_widget_set_tooltip_text(new_btn, "New Tab (Ctrl+T)");
-  g_signal_connect(new_btn, "clicked", G_CALLBACK(on_new_tab_clicked), self);
-  adw_header_bar_pack_end(ADW_HEADER_BAR(header), new_btn);
+  GtkCssProvider *tab_css = gtk_css_provider_new();
+  gtk_css_provider_load_from_string(tab_css,
+    ".tab-title-wrap { min-height: 34px; }"
+    ".tab-scroll { min-height: 34px; }"
+    ".tab-scroll undershoot.top, .tab-scroll overshoot.top,"
+    ".tab-scroll undershoot.bottom, .tab-scroll overshoot.bottom {"
+    "  min-height: 0; background: none; }"
+    /* Tab row: rounded container that holds title + close together */
+    ".sb-tab-row {"
+    "  background: alpha(@window_fg_color, 0.06);"
+    "  border-radius: 6px;"
+    "  padding: 0;"
+    "  margin: 0 2px;"
+    "}"
+    ".sb-tab-row:hover { background: alpha(@window_fg_color, 0.10); }"
+    /* Active row: solid uniform background spanning title + close button */
+    ".sb-tab-row.active {"
+    "  background: alpha(@window_fg_color, 0.18);"
+    "}"
+    ".sb-tab-row.active:hover {"
+    "  background: alpha(@window_fg_color, 0.22);"
+    "}"
+    ".sb-tab-button {"
+    "  border-radius: 5px 0 0 5px;"
+    "  padding: 2px 8px 2px 10px;"
+    "  min-height: 24px;"
+    "  background: transparent;"
+    "  box-shadow: none;"
+    "  border: none;"
+    "  outline: none;"
+    "  color: alpha(@window_fg_color, 0.75);"
+    "}"
+    ".sb-tab-button:hover {"
+    "  background: transparent;"
+    "  color: @window_fg_color;"
+    "}"
+    /* Active tab text: bold, full opacity, no extra background (row provides it) */
+    ".sb-tab-button:checked {"
+    "  background: transparent;"
+    "  color: @window_fg_color;"
+    "  box-shadow: none;"
+    "  border: none;"
+    "  font-weight: bold;"
+    "}"
+    ".sb-tab-button:checked:hover {"
+    "  background: transparent;"
+    "}"
+    /* Kill default focus ring / indicator stripes */
+    ".sb-tab-button:focus,"
+    ".sb-tab-button:focus-visible {"
+    "  outline: none; box-shadow: none; border: none;"
+    "}"
+    ".sb-tab-button > check,"
+    ".sb-tab-button > indicator { background: none; min-width: 0; min-height: 0;"
+    "  padding: 0; margin: 0; border: none; }"
+    ".sb-tab-close {"
+    "  min-width: 18px; min-height: 18px;"
+    "  padding: 0;"
+    "  margin: 0 4px 0 0;"
+    "  border-radius: 9999px;"
+    "  -gtk-icon-size: 12px;"
+    "  background: transparent;"
+    "  color: alpha(@window_fg_color, 0.55);"
+    "}"
+    /* Hovering only the close icon: keep row's color, just brighten icon */
+    ".sb-tab-close:hover {"
+    "  background: transparent;"
+    "  color: @window_fg_color;"
+    "}"
+    ".sb-tab-row.active .sb-tab-close {"
+    "  color: @window_fg_color;"
+    "}"
+  );
+  gtk_style_context_add_provider_for_display(
+    gtk_widget_get_display(self->tab_bar_scroll),
+    GTK_STYLE_PROVIDER(tab_css),
+    GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  g_object_unref(tab_css);
+  gtk_widget_add_css_class(self->tab_bar_scroll, "tab-scroll");
+
+  /* ---- Header bar (custom GtkBox; AdwHeaderBar's title slot has a
+   * height=0 bug for GtkScrolledWindow children, and pack_start ignores
+   * hexpand, so we lay it out manually instead). ---- */
+  GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+  gtk_widget_add_css_class(header, "toolbar");
+  gtk_widget_add_css_class(header, "sb-chrome");
+  gtk_widget_set_hexpand(header, TRUE);
+
+  /* Toolbar toggle button (left side) */
+  GtkWidget *toggle_btn = gtk_button_new_from_icon_name("sidebar-show-symbolic");
+  gtk_widget_set_tooltip_text(toggle_btn, "Toggle Button Bar");
+  gtk_widget_add_css_class(toggle_btn, "flat");
+  g_signal_connect(toggle_btn, "clicked", G_CALLBACK(on_toolbar_toggle), self);
+  gtk_box_append(GTK_BOX(header), toggle_btn);
+
+  /* Tab bar fills the central horizontal space */
+  gtk_widget_set_hexpand(self->tab_bar_scroll, TRUE);
+  gtk_widget_set_halign(self->tab_bar_scroll, GTK_ALIGN_FILL);
+  gtk_widget_set_valign(self->tab_bar_scroll, GTK_ALIGN_CENTER);
+  gtk_box_append(GTK_BOX(header), self->tab_bar_scroll);
+
+  /* New tab button (at end of tab bar) */
+  self->tab_add_btn = gtk_button_new_with_label("+");
+  gtk_widget_set_tooltip_text(self->tab_add_btn, "New Tab (Ctrl+T)");
+  gtk_widget_set_hexpand(self->tab_add_btn, FALSE);
+  g_signal_connect(self->tab_add_btn, "clicked", G_CALLBACK(on_new_tab_clicked), self);
+  gtk_box_append(GTK_BOX(self->tab_bar_box), self->tab_add_btn);
 
   /* Menu button */
   GtkWidget *menu_btn = gtk_menu_button_new();
   gtk_menu_button_set_icon_name(GTK_MENU_BUTTON(menu_btn),
                                 "open-menu-symbolic");
+  gtk_widget_add_css_class(menu_btn, "flat");
+  gtk_widget_set_tooltip_text(menu_btn, "Main Menu");
   GMenu *menu = g_menu_new();
   g_menu_append(menu, "New Tab", "win.new-tab");
   g_menu_append(menu, "Preferences", "win.preferences");
   g_menu_append(menu, "About", "win.about");
   g_menu_append(menu, "Quit", "win.quit");
-  gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(menu_btn),
-                                 G_MENU_MODEL(menu));
-  adw_header_bar_pack_end(ADW_HEADER_BAR(header), menu_btn);
+  g_object_ref_sink(menu);
+  gtk_menu_button_set_create_popup_func(GTK_MENU_BUTTON(menu_btn),
+    create_menu_popup, G_MENU_MODEL(menu), (GDestroyNotify)g_object_unref);
+  gtk_box_append(GTK_BOX(header), menu_btn);
 
-  /* ---- Assemble toolbar view ---- */
+  /* Window controls (minimize/maximize/close) */
+  GtkWidget *win_controls = gtk_window_controls_new(GTK_PACK_END);
+  gtk_window_controls_set_decoration_layout(
+    GTK_WINDOW_CONTROLS(win_controls), ":minimize,maximize,close");
+  gtk_box_append(GTK_BOX(header), win_controls);
+
+  /* ---- Assemble toolbar view (bars at bottom) ---- */
   self->toolbar_view = adw_toolbar_view_new();
-  adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(self->toolbar_view), header);
-  adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(self->toolbar_view),
-                               GTK_WIDGET(self->tab_bar));
-  adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(self->toolbar_view),
-                               sb_toolbar_get_widget(self->toolbar));
+  adw_toolbar_view_add_bottom_bar(ADW_TOOLBAR_VIEW(self->toolbar_view),
+                                  self->toolbar_revealer);
+  adw_toolbar_view_add_bottom_bar(ADW_TOOLBAR_VIEW(self->toolbar_view), header);
   adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(self->toolbar_view),
                                GTK_WIDGET(self->tab_view));
 

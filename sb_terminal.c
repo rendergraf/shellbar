@@ -1018,7 +1018,7 @@ SbTerminal *sb_terminal_new(void) {
   ghostty_terminal_set(self->terminal,
     GHOSTTY_TERMINAL_OPT_COLOR_SCHEME, &effect_color_scheme);
 
-  /* Set default colors */
+  /* Set default colors (overridden by sb_terminal_apply_theme later) */
   GhosttyColorRgb fg = {0xEA, 0xEA, 0xEA};
   GhosttyColorRgb bg = {0x1E, 0x1E, 0x1E};
   ghostty_terminal_set(self->terminal,
@@ -1182,4 +1182,40 @@ void sb_terminal_set_keybinds(SbTerminal *self, const SbConfigKeybind *keybinds,
   self->keybind_count = count;
   self->keybinds = g_malloc(count * sizeof(SbConfigKeybind));
   memcpy(self->keybinds, keybinds, count * sizeof(SbConfigKeybind));
+}
+
+void sb_terminal_apply_theme(SbTerminal *self, const SbTheme *theme) {
+  if (!self || !theme || !self->terminal) return;
+
+  GhosttyColorRgb fg = { theme->term_foreground.r,
+                         theme->term_foreground.g,
+                         theme->term_foreground.b };
+  GhosttyColorRgb bg = { theme->term_background.r,
+                         theme->term_background.g,
+                         theme->term_background.b };
+  GhosttyColorRgb cur = { theme->term_cursor.r,
+                          theme->term_cursor.g,
+                          theme->term_cursor.b };
+
+  ghostty_terminal_set(self->terminal,
+    GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, &fg);
+  ghostty_terminal_set(self->terminal,
+    GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, &bg);
+  ghostty_terminal_set(self->terminal,
+    GHOSTTY_TERMINAL_OPT_COLOR_CURSOR, &cur);
+
+  /* Build a 256-color palette: first 16 from the theme, rest left at the
+   * libghostty defaults by reading them back first. */
+  GhosttyColorRgb palette[256];
+  ghostty_terminal_get(self->terminal,
+    GHOSTTY_TERMINAL_DATA_COLOR_PALETTE_DEFAULT, palette);
+  for (int i = 0; i < 16; i++) {
+    palette[i].r = theme->ansi[i].r;
+    palette[i].g = theme->ansi[i].g;
+    palette[i].b = theme->ansi[i].b;
+  }
+  ghostty_terminal_set(self->terminal,
+    GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, palette);
+
+  if (self->widget) gtk_widget_queue_draw(self->widget);
 }

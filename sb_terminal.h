@@ -8,6 +8,7 @@
 
 #include <gtk/gtk.h>
 #include "sb_config.h"
+#include "sb_theme.h"
 
 typedef struct _SbTerminal SbTerminal;
 
@@ -26,5 +27,6 @@ void sb_terminal_copy(SbTerminal *self);
 void sb_terminal_paste(SbTerminal *self);
 void sb_terminal_select_all(SbTerminal *self);
 void sb_terminal_set_keybinds(SbTerminal *self, const SbConfigKeybind *keybinds, int count);
+void sb_terminal_apply_theme(SbTerminal *self, const SbTheme *theme);
 
 #endif
