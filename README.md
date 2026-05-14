@@ -1,6 +1,7 @@
-# ShellBar v1.0
+# ShellBar v1.1
 
-> A command-bar terminal emulator built on Ghostty — with a configurable toolbar for launching commands.
+> **Ghostty-like terminal emulator with a workflow toolbar — for Linux.**
+> ShellBar is **NOT a fork**. It uses `libghostty-vt` as a library via CMake FetchContent, maintaining complete independence from upstream Ghostty.
 
 <p align="center">
   <a href="https://github.com/rendergraf/shellbar"><img src="https://img.shields.io/github/stars/rendergraf/shellbar" alt="GitHub Stars"></a>
@@ -8,6 +9,17 @@
   <a href="https://github.com/rendergraf/shellbar/blob/main/LICENSE"><img src="https://img.shields.io/github/license/rendergraf/shellbar" alt="MIT License"></a>
   <a href="https://rendergraf.github.io/shellbar/"><img src="https://img.shields.io/badge/Website-shellbar-blue" alt="Website"></a>
   <a href="https://github.com/rendergraf/shellbar/releases/latest"><img src="https://img.shields.io/github/v/release/rendergraf/shellbar" alt="Latest Release"></a>
+  <img src="https://img.shields.io/badge/NOT_a_fork-independent-8257D0" alt="Not a fork">
+</p>
+
+## Screenshots
+
+<p align="center">
+  <img src="assets/screenshot-1.png" alt="ShellBar terminal with toolbar" width="48%">
+  <img src="assets/screenshot-2.png" alt="ShellBar terminal with tabs" width="48%">
+</p>
+<p align="center">
+  <img src="assets/screenshot-3.png" alt="ShellBar terminal with config" width="48%">
 </p>
 
 ## Tech Stack
@@ -34,10 +46,16 @@
 
 ShellBar is a terminal emulator built on **Ghostty**'s VT engine
 (`libghostty-vt`), with a configurable toolbar that lets you launch
-commands with a single click.
+commands with a single click. It's designed for developers who want a
+fast, Ghostty-like terminal with workflow buttons at their fingertips.
 
-Visually it's a Ghostty clone for Linux (GTK4 + libadwaita, dark theme,
-inline tabs). The difference is the button bar that you can configure
+**ShellBar is NOT a fork of Ghostty.** It uses `libghostty-vt` as a
+library via CMake `FetchContent` — no patches, no upstream modifications,
+no merge conflicts. This keeps the project independent, lightweight, and
+easy to maintain while benefiting from Ghostty's industry-leading VT engine.
+
+Visually it's a Ghostty-like terminal for Linux (GTK4 + libadwaita, dark
+theme, inline tabs). The difference is the button bar that you configure
 to run any command on the active terminal.
 
 ## Features
@@ -64,8 +82,8 @@ to run any command on the active terminal.
 ### Debian/Ubuntu (pre-built .deb)
 
 ```sh
-curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.0.0_amd64.deb
-sudo dpkg -i shellbar_1.0.0_amd64.deb
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.1.0_amd64.deb
+sudo dpkg -i shellbar_1.1.0_amd64.deb
 sudo apt-get install -f
 ```
 

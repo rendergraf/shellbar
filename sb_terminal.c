@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.1 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -271,6 +271,153 @@ static GtkWidget *create_context_menu(SbTerminal *self) {
 }
 
 /* ------------------------------------------------------------------ */
+/* URL detection / open                                                 */
+/* ------------------------------------------------------------------ */
+
+/* Read the full visible text of a single row. byte_for_col[i] (if non-NULL)
+ * receives the byte offset within the returned string for the start of cell
+ * column i (0..cols). The terminator slot byte_for_col[cols] is set to the
+ * total byte length. */
+static char *read_row_text(SbTerminal *self, int target_row,
+                           int *byte_for_col) {
+  if (target_row < 0 || target_row >= (int)self->rows) return NULL;
+
+  GString *out = g_string_new("");
+  if (byte_for_col)
+    for (int i = 0; i <= (int)self->cols; i++) byte_for_col[i] = 0;
+
+  if (ghostty_render_state_get(self->render_state,
+        GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &self->row_iter)
+      != GHOSTTY_SUCCESS)
+    return g_string_free(out, FALSE);
+
+  int row_idx = 0;
+  while (ghostty_render_state_row_iterator_next(self->row_iter)) {
+    if (row_idx != target_row) { row_idx++; continue; }
+
+    if (ghostty_render_state_row_get(self->row_iter,
+          GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, &self->cells)
+        != GHOSTTY_SUCCESS) break;
+
+    int col_idx = 0;
+    while (ghostty_render_state_row_cells_next(self->cells)) {
+      if (byte_for_col && col_idx <= (int)self->cols)
+        byte_for_col[col_idx] = (int)out->len;
+
+      uint32_t grapheme_len = 0;
+      ghostty_render_state_row_cells_get(self->cells,
+        GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN, &grapheme_len);
+      if (grapheme_len > 0) {
+        uint32_t codepoints[16];
+        uint32_t len = grapheme_len < 16 ? grapheme_len : 16;
+        ghostty_render_state_row_cells_get(self->cells,
+          GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF, codepoints);
+        for (uint32_t i = 0; i < len; i++) {
+          char utf8[8] = {0};
+          int n = g_unichar_to_utf8((gunichar)codepoints[i], utf8);
+          if (n > 0) g_string_append_len(out, utf8, n);
+        }
+      } else {
+        g_string_append_c(out, ' ');
+      }
+      col_idx++;
+      if (col_idx >= (int)self->cols) break;
+    }
+    /* fill remaining with spaces and advance byte_for_col */
+    while (col_idx < (int)self->cols) {
+      if (byte_for_col) byte_for_col[col_idx] = (int)out->len;
+      g_string_append_c(out, ' ');
+      col_idx++;
+    }
+    if (byte_for_col) byte_for_col[self->cols] = (int)out->len;
+    break;
+  }
+
+  return g_string_free(out, FALSE);
+}
+
+/* True if c is a valid character for the body of a URL. */
+static bool url_char(unsigned char c) {
+  if (c <= 0x20 || c >= 0x7F) return false;
+  switch (c) {
+    case '<': case '>': case '"': case '\'':
+    case '`': case ' ': case '\t':
+    case ',': case ';':
+    case ')': case ']': case '}':
+      return false;
+    default:
+      return true;
+  }
+}
+
+/* Find a URL in `text` that contains byte offset `pos`. Returns a newly
+ * allocated string or NULL. */
+static char *find_url_at_byte(const char *text, int pos) {
+  if (!text || pos < 0) return NULL;
+  int len = (int)strlen(text);
+  if (pos >= len) return NULL;
+
+  /* Find scheme starts to the left. We accept http/https/ftp/file/ssh/mailto. */
+  static const char *const schemes[] = {
+    "https://", "http://", "ftp://", "ftps://",
+    "file://", "ssh://", "mailto:", NULL
+  };
+
+  /* Walk backwards looking for any scheme token that, plus its body, covers pos. */
+  for (int start = pos; start >= 0; start--) {
+    for (int s = 0; schemes[s]; s++) {
+      int slen = (int)strlen(schemes[s]);
+      if (start + slen > len) continue;
+      if (g_ascii_strncasecmp(text + start, schemes[s], slen) != 0) continue;
+
+      int end = start + slen;
+      while (end < len && url_char((unsigned char)text[end])) end++;
+      /* Trim trailing punctuation that often follows URLs in prose. */
+      while (end > start + slen) {
+        char last = text[end - 1];
+        if (last == '.' || last == ',' || last == ';' ||
+            last == ':' || last == '!' || last == '?')
+          end--;
+        else break;
+      }
+      if (end <= pos) continue;
+      if (end - start <= slen) continue;
+      return g_strndup(text + start, end - start);
+    }
+  }
+  return NULL;
+}
+
+/* Resolve URL at terminal cell (col,row), returns newly allocated string. */
+static char *url_at_cell(SbTerminal *self, int col, int row) {
+  int *map = g_malloc((self->cols + 1) * sizeof(int));
+  char *line = read_row_text(self, row, map);
+  char *url = NULL;
+  if (line && col >= 0 && col < (int)self->cols)
+    url = find_url_at_byte(line, map[col]);
+  g_free(line);
+  g_free(map);
+  return url;
+}
+
+static void open_url(const char *url) {
+  if (!url || !*url) return;
+  char *full = NULL;
+  if (g_ascii_strncasecmp(url, "mailto:", 7) == 0) {
+    full = g_strdup(url);
+  } else {
+    full = g_strdup(url);
+  }
+  GError *err = NULL;
+  g_app_info_launch_default_for_uri(full, NULL, &err);
+  if (err) {
+    g_warning("sb_terminal: failed to open URL '%s': %s", full, err->message);
+    g_error_free(err);
+  }
+  g_free(full);
+}
+
+/* ------------------------------------------------------------------ */
 /* Mouse gesture callbacks                                              */
 /* ------------------------------------------------------------------ */
 
@@ -339,6 +486,29 @@ static void right_click_pressed(GtkGestureClick *gesture, int n_press,
   GdkRectangle rect = { (int)x, (int)y, 1, 1 };
   gtk_popover_set_pointing_to(GTK_POPOVER(self->context_menu), &rect);
   gtk_popover_popup(GTK_POPOVER(self->context_menu));
+}
+
+/* Ctrl+left-click on a URL opens it with the desktop default handler. */
+static void link_click_pressed(GtkGestureClick *gesture, int n_press,
+                               double x, double y, gpointer user_data) {
+  SbTerminal *self = user_data;
+  (void)n_press;
+  GdkModifierType state =
+    gtk_event_controller_get_current_event_state(
+      GTK_EVENT_CONTROLLER(gesture));
+  if (!(state & GDK_CONTROL_MASK)) return;
+
+  int col = (int)((x - self->padding) / self->cell_width);
+  int row = (int)((y - self->padding) / self->cell_height);
+  if (col < 0 || row < 0 ||
+      col >= (int)self->cols || row >= (int)self->rows) return;
+
+  char *url = url_at_cell(self, col, row);
+  if (!url) return;
+  open_url(url);
+  g_free(url);
+  /* Stop the drag gesture from also reacting to this press. */
+  gtk_gesture_set_state(GTK_GESTURE(gesture), GTK_EVENT_SEQUENCE_CLAIMED);
 }
 
 /* ------------------------------------------------------------------ */
@@ -450,7 +620,7 @@ static bool effect_device_attributes(GhosttyTerminal terminal, void *userdata,
 static GhosttyString effect_xtversion(GhosttyTerminal terminal, void *userdata) {
   (void)terminal;
   (void)userdata;
-  return (GhosttyString){ .ptr = (const uint8_t *)"shellbar 0.1.0", .len = 16 };
+  return (GhosttyString){ .ptr = (const uint8_t *)"shellbar 1.1", .len = 13 };
 }
 
 static bool effect_color_scheme(GhosttyTerminal terminal, void *userdata,
@@ -587,16 +757,43 @@ gboolean sb_terminal_handle_key(SbTerminal *self, guint keyval,
                                 guint keycode, GdkModifierType state) {
   (void)keycode;
 
+  /* Normalize keyval (Shift+c arrives as 'C'); compare case-insensitively
+   * against configured keybinds. */
+  guint kv_lower = gdk_keyval_to_lower(keyval);
+  GdkModifierType kb_mods = state & (GDK_CONTROL_MASK |
+    GDK_SHIFT_MASK | GDK_ALT_MASK | GDK_SUPER_MASK);
+
   for (int i = 0; i < self->keybind_count; i++) {
-    if (self->keybinds[i].keyval == keyval &&
-        self->keybinds[i].mods == (state & (GDK_CONTROL_MASK |
-           GDK_SHIFT_MASK | GDK_ALT_MASK | GDK_SUPER_MASK))) {
+    if (gdk_keyval_to_lower(self->keybinds[i].keyval) == kv_lower &&
+        self->keybinds[i].mods == kb_mods) {
       switch (self->keybinds[i].action) {
         case SB_ACTION_COPY:       copy_to_clipboard(self); break;
         case SB_ACTION_PASTE:      paste_from_clipboard(self); break;
         case SB_ACTION_SELECT_ALL: sb_terminal_select_all(self); break;
         default: break;
       }
+      return GDK_EVENT_STOP;
+    }
+  }
+
+  /* Smart Ctrl+C/V/X: Ctrl+C copies only when there is an active selection
+   * (otherwise it falls through to the PTY as SIGINT). Ctrl+V always pastes.
+   * Ctrl+X behaves like Copy + clear selection (the terminal cannot truly
+   * cut). Plain Ctrl (no Shift/Alt) only. */
+  if ((state & GDK_CONTROL_MASK) &&
+      !(state & (GDK_SHIFT_MASK | GDK_ALT_MASK | GDK_SUPER_MASK))) {
+    if (kv_lower == GDK_KEY_c && self->has_selection) {
+      copy_to_clipboard(self);
+      selection_clear(self);
+      return GDK_EVENT_STOP;
+    }
+    if (kv_lower == GDK_KEY_v) {
+      paste_from_clipboard(self);
+      return GDK_EVENT_STOP;
+    }
+    if (kv_lower == GDK_KEY_x && self->has_selection) {
+      copy_to_clipboard(self);
+      selection_clear(self);
       return GDK_EVENT_STOP;
     }
   }
@@ -1092,6 +1289,14 @@ SbTerminal *sb_terminal_new(void) {
                    G_CALLBACK(right_click_pressed), self);
   gtk_widget_add_controller(self->widget,
                              GTK_EVENT_CONTROLLER(self->right_click_gesture));
+
+  /* Ctrl+left-click to open URLs */
+  GtkGesture *link_click = GTK_GESTURE(gtk_gesture_click_new());
+  gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(link_click),
+                                GDK_BUTTON_PRIMARY);
+  g_signal_connect(link_click, "pressed",
+                   G_CALLBACK(link_click_pressed), self);
+  gtk_widget_add_controller(self->widget, GTK_EVENT_CONTROLLER(link_click));
 
   self->context_menu = NULL;
 

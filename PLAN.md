@@ -1,4 +1,4 @@
-# ShellBar v1.0 — Architecture Plan
+# ShellBar v1.1 — Architecture Plan
 
 > **Author:** Xavier Araque <xavieraraque@gmail.com> — May 2026
 > **Repo:** [github.com/rendergraf/shellbar](https://github.com/rendergraf/shellbar)
