@@ -1,4 +1,4 @@
-# ShellBar v1.1
+# ShellBar v1.2
 
 > **Ghostty-like terminal emulator with a workflow toolbar — for Linux.**
 > ShellBar is **NOT a fork**. It uses `libghostty-vt` as a library via CMake FetchContent, maintaining complete independence from upstream Ghostty.
@@ -82,8 +82,8 @@ to run any command on the active terminal.
 ### Debian/Ubuntu (pre-built .deb)
 
 ```sh
-curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.1.0_amd64.deb
-sudo dpkg -i shellbar_1.1.0_amd64.deb
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.2_amd64.deb
+sudo dpkg -i shellbar_1.2_amd64.deb
 sudo apt-get install -f
 ```
 
