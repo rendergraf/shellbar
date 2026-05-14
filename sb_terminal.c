@@ -57,6 +57,10 @@ struct _SbTerminal {
 
   bool cursor_visible;
 
+  guint scroll_anim_timer;
+  guint follow_timer;
+  bool follow_bottom;
+
   SbTerminalTitleCb title_cb;
   void *title_cb_data;
 
@@ -68,10 +72,18 @@ struct _SbTerminal {
   SbConfigKeybind *keybinds;
   int keybind_count;
 
-  GtkGesture *drag_gesture;
   GtkGesture *right_click_gesture;
 
   GtkWidget *context_menu;
+
+  bool button_held;
+  int press_col, press_row;
+
+  GtkEventController *motion_controller;
+  int hover_col, hover_row;
+  char *hover_url;
+  int hover_url_start_col, hover_url_end_col, hover_url_row;
+  bool has_hover_url;
 };
 
 /* ------------------------------------------------------------------ */
@@ -351,8 +363,10 @@ static bool url_char(unsigned char c) {
 }
 
 /* Find a URL in `text` that contains byte offset `pos`. Returns a newly
- * allocated string or NULL. */
-static char *find_url_at_byte(const char *text, int pos) {
+ * allocated string or NULL. If non-NULL, *out_start and *out_end receive the
+ * byte offset of the URL start and the byte after the URL end. */
+static char *find_url_at_byte(const char *text, int pos,
+                              int *out_start, int *out_end) {
   if (!text || pos < 0) return NULL;
   int len = (int)strlen(text);
   if (pos >= len) return NULL;
@@ -382,6 +396,8 @@ static char *find_url_at_byte(const char *text, int pos) {
       }
       if (end <= pos) continue;
       if (end - start <= slen) continue;
+      if (out_start) *out_start = start;
+      if (out_end)   *out_end   = end;
       return g_strndup(text + start, end - start);
     }
   }
@@ -394,10 +410,55 @@ static char *url_at_cell(SbTerminal *self, int col, int row) {
   char *line = read_row_text(self, row, map);
   char *url = NULL;
   if (line && col >= 0 && col < (int)self->cols)
-    url = find_url_at_byte(line, map[col]);
+    url = find_url_at_byte(line, map[col], NULL, NULL);
   g_free(line);
   g_free(map);
   return url;
+}
+
+typedef struct {
+  char *url;
+  int start_col;
+  int end_col;
+} UrlCellRange;
+
+/* Like url_at_cell but also returns the column span of the URL.
+   Returns true if a URL was found. range->url must be freed by caller. */
+static bool url_range_at_cell(SbTerminal *self, int col, int row,
+                              UrlCellRange *range) {
+  memset(range, 0, sizeof(*range));
+
+  int *map = g_malloc((self->cols + 1) * sizeof(int));
+  char *line = read_row_text(self, row, map);
+
+  if (!line || col < 0 || col >= (int)self->cols) {
+    g_free(line);
+    g_free(map);
+    return false;
+  }
+
+  int byte_start = 0, byte_end = 0;
+  char *url = find_url_at_byte(line, map[col], &byte_start, &byte_end);
+  if (!url) {
+    g_free(line);
+    g_free(map);
+    return false;
+  }
+
+  /* Map byte offsets back to column indices. start_col gets the column
+     whose byte offset is ≤ byte_start; end_col the column whose byte
+     offset is < byte_end. */
+  range->start_col = 0;
+  range->end_col = 0;
+  for (int i = 0; i < (int)self->cols; i++) {
+    if (map[i] <= byte_start)  range->start_col = i;
+    if (map[i] < byte_end)     range->end_col   = i;
+  }
+
+  range->url = url;
+  g_free(line);
+  g_free(map);
+  return true;
 }
 
 static void open_url(const char *url) {
@@ -421,62 +482,6 @@ static void open_url(const char *url) {
 /* Mouse gesture callbacks                                              */
 /* ------------------------------------------------------------------ */
 
-static void drag_begin(GtkGestureDrag *gesture, double x, double y,
-                       gpointer user_data) {
-  SbTerminal *self = user_data;
-  (void)gesture;
-  self->selecting = true;
-  int col = (int)((x - self->padding) / self->cell_width);
-  int row = (int)((y - self->padding) / self->cell_height);
-  if (col < 0) col = 0;
-  if (row < 0) row = 0;
-  if (col >= (int)self->cols) col = self->cols - 1;
-  if (row >= (int)self->rows) row = self->rows - 1;
-  self->sel_start_col = self->sel_end_col = col;
-  self->sel_start_row = self->sel_end_row = row;
-  self->has_selection = false;
-}
-
-static void drag_update(GtkGestureDrag *gesture, double offset_x,
-                        double offset_y, gpointer user_data) {
-  SbTerminal *self = user_data;
-  if (!self->selecting) return;
-  double sx, sy;
-  gtk_gesture_drag_get_start_point(GTK_GESTURE_DRAG(gesture), &sx, &sy);
-  double cx = sx + offset_x;
-  double cy = sy + offset_y;
-  int col = (int)((cx - self->padding) / self->cell_width);
-  int row = (int)((cy - self->padding) / self->cell_height);
-  if (col < 0) col = 0;
-  if (row < 0) row = 0;
-  if (col >= (int)self->cols) col = self->cols - 1;
-  if (row >= (int)self->rows) row = self->rows - 1;
-  selection_from_cell_coords(self, self->sel_start_col, self->sel_start_row,
-                             col, row);
-  gtk_widget_queue_draw(self->widget);
-}
-
-static void drag_end(GtkGestureDrag *gesture, double offset_x,
-                     double offset_y, gpointer user_data) {
-  SbTerminal *self = user_data;
-  (void)gesture;
-  if (!self->selecting) return;
-  double sx, sy;
-  gtk_gesture_drag_get_start_point(GTK_GESTURE_DRAG(gesture), &sx, &sy);
-  double cx = sx + offset_x;
-  double cy = sy + offset_y;
-  int col = (int)((cx - self->padding) / self->cell_width);
-  int row = (int)((cy - self->padding) / self->cell_height);
-  if (col < 0) col = 0;
-  if (row < 0) row = 0;
-  if (col >= (int)self->cols) col = self->cols - 1;
-  if (row >= (int)self->rows) row = self->rows - 1;
-  selection_from_cell_coords(self, self->sel_start_col, self->sel_start_row,
-                             col, row);
-  self->selecting = false;
-  gtk_widget_queue_draw(self->widget);
-}
-
 static void right_click_pressed(GtkGestureClick *gesture, int n_press,
                                 double x, double y, gpointer user_data) {
   SbTerminal *self = user_data;
@@ -488,27 +493,273 @@ static void right_click_pressed(GtkGestureClick *gesture, int n_press,
   gtk_popover_popup(GTK_POPOVER(self->context_menu));
 }
 
-/* Ctrl+left-click on a URL opens it with the desktop default handler. */
-static void link_click_pressed(GtkGestureClick *gesture, int n_press,
-                               double x, double y, gpointer user_data) {
-  SbTerminal *self = user_data;
+/* Middle-click pastes from clipboard. */
+static void middle_click_pressed(GtkGestureClick *gesture, int n_press,
+                                 double x, double y, gpointer user_data) {
+  (void)gesture;
   (void)n_press;
-  GdkModifierType state =
-    gtk_event_controller_get_current_event_state(
-      GTK_EVENT_CONTROLLER(gesture));
-  if (!(state & GDK_CONTROL_MASK)) return;
+  (void)x;
+  (void)y;
+  SbTerminal *self = user_data;
+  paste_from_clipboard(self);
+}
+
+/* Word-character test used for double-click word selection. */
+static bool is_word_char(unsigned char c) {
+  return g_ascii_isalnum(c) || c == '_' || c == '-' || c == '.';
+}
+
+/* Select the word at (col, row). */
+static void select_word_at(SbTerminal *self, int col, int row) {
+  int *map = g_malloc((self->cols + 1) * sizeof(int));
+  char *line = read_row_text(self, row, map);
+  if (!line) { g_free(map); return; }
+
+  int byte_pos = map[col];
+  int len = (int)strlen(line);
+
+  int ws = byte_pos;
+  while (ws > 0 && is_word_char((unsigned char)line[ws - 1])) ws--;
+
+  int we = byte_pos;
+  while (we < len && is_word_char((unsigned char)line[we])) we++;
+
+  if (ws == we) { g_free(line); g_free(map); return; }
+
+  self->sel_start_col = 0;
+  self->sel_start_row = row;
+  self->sel_end_col = 0;
+  self->sel_end_row = row;
+  for (int i = 0; i < (int)self->cols; i++) {
+    if (map[i] <= ws) self->sel_start_col = i;
+    if (map[i] <  we) self->sel_end_col   = i;
+  }
+  self->has_selection = true;
+
+  g_free(line);
+  g_free(map);
+}
+
+/* Combined left-click handler.
+   - triple-click → select line
+   - double-click → select word
+   - Ctrl+click  → open URL
+   - Shift+click → extend selection
+   - single click → initiate drag selection via on_motion */
+static void left_click_pressed(GtkGestureClick *gesture, int n_press,
+                                double x, double y, gpointer user_data) {
+  SbTerminal *self = user_data;
 
   int col = (int)((x - self->padding) / self->cell_width);
   int row = (int)((y - self->padding) / self->cell_height);
-  if (col < 0 || row < 0 ||
-      col >= (int)self->cols || row >= (int)self->rows) return;
+  if (col < 0) col = 0;
+  if (row < 0) row = 0;
+  if (col >= (int)self->cols) col = self->cols - 1;
+  if (row >= (int)self->rows) row = self->rows - 1;
 
-  char *url = url_at_cell(self, col, row);
-  if (!url) return;
-  open_url(url);
-  g_free(url);
-  /* Stop the drag gesture from also reacting to this press. */
+  self->button_held = true;
+  self->press_col = col;
+  self->press_row = row;
+
+  GdkModifierType state =
+    gtk_event_controller_get_current_event_state(
+      GTK_EVENT_CONTROLLER(gesture));
+
+  /* Triple-click → select entire line */
+  if (n_press >= 3) {
+    self->sel_start_col = 0;
+    self->sel_start_row = row;
+    self->sel_end_col = self->cols - 1;
+    self->sel_end_row = row;
+    self->has_selection = true;
+    self->selecting = false;
+    copy_to_clipboard(self);
+    gtk_gesture_set_state(GTK_GESTURE(gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+    gtk_widget_queue_draw(self->widget);
+    return;
+  }
+
+  /* Double-click → select word */
+  if (n_press == 2) {
+    select_word_at(self, col, row);
+    self->selecting = false;
+    if (self->has_selection)
+      copy_to_clipboard(self);
+    gtk_gesture_set_state(GTK_GESTURE(gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+    gtk_widget_queue_draw(self->widget);
+    return;
+  }
+
+  /* Ctrl+click → open URL */
+  if (state & GDK_CONTROL_MASK) {
+    char *url = url_at_cell(self, col, row);
+    if (url) {
+      open_url(url);
+      g_free(url);
+      self->selecting = false;
+      gtk_gesture_set_state(GTK_GESTURE(gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+      return;
+    }
+  }
+
+  /* Shift+click → extend selection */
+  if (state & GDK_SHIFT_MASK) {
+    if (!self->has_selection) {
+      uint16_t cx = 0, cy = 0;
+      ghostty_render_state_get(self->render_state,
+        GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X, &cx);
+      ghostty_render_state_get(self->render_state,
+        GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y, &cy);
+      selection_from_cell_coords(self, cx, cy, col, row);
+    } else {
+      selection_from_cell_coords(self, self->sel_start_col,
+        self->sel_start_row, col, row);
+    }
+    self->selecting = false;
+    copy_to_clipboard(self);
+    gtk_gesture_set_state(GTK_GESTURE(gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+    gtk_widget_queue_draw(self->widget);
+    return;
+  }
+
+  /* Plain single click: prepare for potential drag selection */
+  self->selecting = true;
+  self->sel_start_col = self->sel_end_col = col;
+  self->sel_start_row = self->sel_end_row = row;
+  self->has_selection = false;
   gtk_gesture_set_state(GTK_GESTURE(gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+}
+
+static void left_click_released(GtkGestureClick *gesture, int n_press,
+                                 double x, double y, gpointer user_data) {
+  (void)gesture;
+  (void)n_press;
+  (void)x;
+  (void)y;
+  SbTerminal *self = user_data;
+
+  self->button_held = false;
+
+  if (!self->selecting) return;
+  self->selecting = false;
+
+  if (self->has_selection)
+    copy_to_clipboard(self);
+  else
+    selection_clear(self);
+
+  gtk_widget_queue_draw(self->widget);
+}
+
+/* ------------------------------------------------------------------ */
+/* Motion / hover callbacks                                             */
+/* ------------------------------------------------------------------ */
+
+static gboolean on_query_tooltip(GtkWidget *widget, gint x, gint y,
+                                  gboolean keyboard_mode, GtkTooltip *tooltip,
+                                  gpointer user_data) {
+  (void)widget;
+  (void)x;
+  (void)y;
+  (void)keyboard_mode;
+  SbTerminal *self = user_data;
+
+  if (self->has_hover_url) {
+    gtk_tooltip_set_text(tooltip, "Ctrl+Click to open link");
+    return TRUE;
+  }
+  return FALSE;
+}
+
+static void on_motion_enter(GtkEventControllerMotion *controller,
+                            gdouble x, gdouble y, gpointer user_data) {
+  (void)controller;
+  SbTerminal *self = user_data;
+
+  int col = (int)((x - self->padding) / self->cell_width);
+  int row = (int)((y - self->padding) / self->cell_height);
+
+  if (col >= 0 && row >= 0 &&
+      col < (int)self->cols && row < (int)self->rows) {
+    GdkCursor *cursor = gdk_cursor_new_from_name("text", NULL);
+    gtk_widget_set_cursor(self->widget, cursor);
+    g_object_unref(cursor);
+  }
+}
+
+static void on_motion(GtkEventControllerMotion *controller,
+                      gdouble x, gdouble y, gpointer user_data) {
+  (void)controller;
+  SbTerminal *self = user_data;
+
+  int col = (int)((x - self->padding) / self->cell_width);
+  int row = (int)((y - self->padding) / self->cell_height);
+
+  /* Drag selection (button held + selecting mode) */
+  if (self->button_held && self->selecting) {
+    if (col < 0) col = 0;
+    if (row < 0) row = 0;
+    if (col >= (int)self->cols) col = self->cols - 1;
+    if (row >= (int)self->rows) row = self->rows - 1;
+    selection_from_cell_coords(self, self->press_col, self->press_row,
+                                col, row);
+    gtk_widget_queue_draw(self->widget);
+    return;
+  }
+
+  if (col == self->hover_col && row == self->hover_row)
+    return;
+
+  self->hover_col = col;
+  self->hover_row = row;
+
+  g_free(self->hover_url);
+  self->hover_url = NULL;
+  self->has_hover_url = false;
+
+  bool in_bounds = (col >= 0 && row >= 0 &&
+                    col < (int)self->cols && row < (int)self->rows);
+
+  if (in_bounds) {
+    UrlCellRange range;
+    if (url_range_at_cell(self, col, row, &range)) {
+      self->hover_url = range.url;
+      self->hover_url_start_col = range.start_col;
+      self->hover_url_end_col = range.end_col;
+      self->hover_url_row = row;
+      self->has_hover_url = true;
+    }
+  }
+
+  const char *cursor_name = NULL;
+  if (self->has_hover_url)
+    cursor_name = "pointer";
+  else if (in_bounds)
+    cursor_name = "text";
+
+  if (cursor_name) {
+    GdkCursor *cursor = gdk_cursor_new_from_name(cursor_name, NULL);
+    gtk_widget_set_cursor(self->widget, cursor);
+    g_object_unref(cursor);
+  } else {
+    gtk_widget_set_cursor(self->widget, NULL);
+  }
+
+  gtk_widget_queue_draw(self->widget);
+}
+
+static void on_motion_leave(GtkEventControllerMotion *controller,
+                            gpointer user_data) {
+  (void)controller;
+  SbTerminal *self = user_data;
+
+  if (self->has_hover_url) {
+    self->has_hover_url = false;
+    g_free(self->hover_url);
+    self->hover_url = NULL;
+  }
+  gtk_widget_set_cursor(self->widget, NULL);
+  gtk_widget_queue_draw(self->widget);
 }
 
 /* ------------------------------------------------------------------ */
@@ -563,6 +814,69 @@ static void pty_write_raw(int fd, const char *buf, size_t len) {
       break;
     }
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Auto-scroll animation                                                */
+/* ------------------------------------------------------------------ */
+
+static gboolean on_scroll_animate(gpointer user_data) {
+  SbTerminal *self = user_data;
+
+  GhosttyTerminalScrollbar scrollbar = {0};
+  if (ghostty_terminal_get(self->terminal,
+        GHOSTTY_TERMINAL_DATA_SCROLLBAR, &scrollbar) != GHOSTTY_SUCCESS
+      || scrollbar.total <= scrollbar.len) {
+    self->scroll_anim_timer = 0;
+    return G_SOURCE_REMOVE;
+  }
+
+  int bottom = (int)(scrollbar.total - scrollbar.len);
+  if (scrollbar.offset >= bottom) {
+    self->scroll_anim_timer = 0;
+    return G_SOURCE_REMOVE;
+  }
+
+  int remaining = bottom - (int)scrollbar.offset;
+  int step = remaining / 3;
+  if (step < 1)  step = 1;
+  if (step > 50) step = 50;
+
+  GhosttyTerminalScrollViewport sv = {
+    .tag = GHOSTTY_SCROLL_VIEWPORT_DELTA,
+    .value = { .delta = step },
+  };
+  ghostty_terminal_scroll_viewport(self->terminal, sv);
+  ghostty_render_state_update(self->render_state, self->terminal);
+  gtk_widget_queue_draw(self->widget);
+
+  return G_SOURCE_CONTINUE;
+}
+
+static gboolean clear_follow(gpointer user_data) {
+  SbTerminal *self = user_data;
+  self->follow_bottom = false;
+  self->follow_timer = 0;
+  return G_SOURCE_REMOVE;
+}
+
+static void auto_scroll_to_bottom(SbTerminal *self) {
+  GhosttyTerminalScrollbar scrollbar = {0};
+  if (ghostty_terminal_get(self->terminal,
+        GHOSTTY_TERMINAL_DATA_SCROLLBAR, &scrollbar) != GHOSTTY_SUCCESS)
+    return;
+
+  if (scrollbar.total <= scrollbar.len)
+    return;
+
+  int bottom = (int)(scrollbar.total - scrollbar.len);
+  if (scrollbar.offset >= bottom)
+    return;
+
+  if (self->scroll_anim_timer > 0)
+    g_source_remove(self->scroll_anim_timer);
+
+  self->scroll_anim_timer = g_timeout_add(16, on_scroll_animate, self);
 }
 
 /* ------------------------------------------------------------------ */
@@ -663,6 +977,16 @@ static gboolean on_pty_readable(GIOChannel *channel,
 
   if (dirty) {
     ghostty_render_state_update(self->render_state, self->terminal);
+
+    if (self->follow_bottom) {
+      self->follow_bottom = false;
+      if (self->follow_timer > 0) {
+        g_source_remove(self->follow_timer);
+        self->follow_timer = 0;
+      }
+      auto_scroll_to_bottom(self);
+    }
+
     gtk_widget_queue_draw(self->widget);
   }
 
@@ -776,26 +1100,66 @@ gboolean sb_terminal_handle_key(SbTerminal *self, guint keyval,
     }
   }
 
-  /* Smart Ctrl+C/V/X: Ctrl+C copies only when there is an active selection
-   * (otherwise it falls through to the PTY as SIGINT). Ctrl+V always pastes.
-   * Ctrl+X behaves like Copy + clear selection (the terminal cannot truly
-   * cut). Plain Ctrl (no Shift/Alt) only. */
-  if ((state & GDK_CONTROL_MASK) &&
-      !(state & (GDK_SHIFT_MASK | GDK_ALT_MASK | GDK_SUPER_MASK))) {
-    if (kv_lower == GDK_KEY_c && self->has_selection) {
+  /* Shift+Arrow → extend selection */
+  if ((state & GDK_SHIFT_MASK) &&
+      !(state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK))) {
+    bool is_arrow = false;
+    switch (keyval) {
+      case GDK_KEY_Left:  case GDK_KEY_KP_Left:
+      case GDK_KEY_Right: case GDK_KEY_KP_Right:
+      case GDK_KEY_Up:    case GDK_KEY_KP_Up:
+      case GDK_KEY_Down:  case GDK_KEY_KP_Down:
+        is_arrow = true;
+        break;
+    }
+    if (is_arrow) {
+      uint16_t cx = 0, cy = 0;
+      ghostty_render_state_get(self->render_state,
+        GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X, &cx);
+      ghostty_render_state_get(self->render_state,
+        GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y, &cy);
+
+      if (!self->has_selection) {
+        self->sel_start_col = cx;
+        self->sel_start_row = cy;
+        self->sel_end_col = cx;
+        self->sel_end_row = cy;
+        self->has_selection = true;
+      }
+
+      switch (keyval) {
+        case GDK_KEY_Left:  case GDK_KEY_KP_Left:
+          if (self->sel_end_col > 0) self->sel_end_col--;
+          break;
+        case GDK_KEY_Right: case GDK_KEY_KP_Right:
+          if (self->sel_end_col < (int)self->cols - 1) self->sel_end_col++;
+          break;
+        case GDK_KEY_Up:    case GDK_KEY_KP_Up:
+          if (self->sel_end_row > 0) self->sel_end_row--;
+          break;
+        case GDK_KEY_Down:  case GDK_KEY_KP_Down:
+          if (self->sel_end_row < (int)self->rows - 1) self->sel_end_row++;
+          break;
+      }
+
+      selection_from_cell_coords(self, self->sel_start_col, self->sel_start_row,
+                                 self->sel_end_col, self->sel_end_row);
       copy_to_clipboard(self);
-      selection_clear(self);
+      gtk_widget_queue_draw(self->widget);
       return GDK_EVENT_STOP;
     }
-    if (kv_lower == GDK_KEY_v) {
-      paste_from_clipboard(self);
-      return GDK_EVENT_STOP;
-    }
-    if (kv_lower == GDK_KEY_x && self->has_selection) {
-      copy_to_clipboard(self);
-      selection_clear(self);
-      return GDK_EVENT_STOP;
-    }
+  }
+
+  /* Any other key when there's an active selection clears it */
+  if (self->has_selection)
+    selection_clear(self);
+
+  /* Enter key → flag follow-bottom for next PTY output */
+  if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
+    self->follow_bottom = true;
+    if (self->follow_timer > 0)
+      g_source_remove(self->follow_timer);
+    self->follow_timer = g_timeout_add(2000, clear_follow, self);
   }
 
   static char sb_utf8[8] = {0};
@@ -1084,6 +1448,17 @@ static void render_terminal(GtkDrawingArea *area, cairo_t *cr,
         cairo_fill(cr);
       }
 
+      /* Underline hovered URL cells */
+      if (self->has_hover_url && row_idx == self->hover_url_row &&
+          col_idx >= self->hover_url_start_col &&
+          col_idx <= self->hover_url_end_col) {
+        cairo_set_source_rgb(cr, fg.r / 255.0, fg.g / 255.0, fg.b / 255.0);
+        cairo_set_line_width(cr, 1.0);
+        cairo_move_to(cr, x, y + self->cell_height - 1.5);
+        cairo_line_to(cr, x + self->cell_width, y + self->cell_height - 1.5);
+        cairo_stroke(cr);
+      }
+
       x += self->cell_width;
       col_idx++;
     }
@@ -1186,6 +1561,9 @@ SbTerminal *sb_terminal_new(void) {
   /* Measure cell size using a temporary widget */
   self->widget = gtk_drawing_area_new();
   gtk_widget_set_focusable(self->widget, TRUE);
+  gtk_widget_set_has_tooltip(self->widget, TRUE);
+  g_signal_connect(self->widget, "query-tooltip",
+                   G_CALLBACK(on_query_tooltip), self);
   PangoLayout *tmp = gtk_widget_create_pango_layout(self->widget, "M");
   pango_layout_set_font_description(tmp, self->font_desc);
   pango_layout_get_pixel_size(tmp, &self->cell_width, &self->cell_height);
@@ -1268,19 +1646,6 @@ SbTerminal *sb_terminal_new(void) {
     G_CALLBACK(on_scroll), self);
   gtk_widget_add_controller(self->widget, scroll_controller);
 
-  /* Drag gesture for text selection */
-  self->drag_gesture = GTK_GESTURE(gtk_gesture_drag_new());
-  gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(self->drag_gesture),
-                                GDK_BUTTON_PRIMARY);
-  g_signal_connect(self->drag_gesture, "drag-begin",
-                   G_CALLBACK(drag_begin), self);
-  g_signal_connect(self->drag_gesture, "drag-update",
-                   G_CALLBACK(drag_update), self);
-  g_signal_connect(self->drag_gesture, "drag-end",
-                   G_CALLBACK(drag_end), self);
-  gtk_widget_add_controller(self->widget,
-                             GTK_EVENT_CONTROLLER(self->drag_gesture));
-
   /* Right-click gesture for context menu */
   self->right_click_gesture = GTK_GESTURE(gtk_gesture_click_new());
   gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(self->right_click_gesture),
@@ -1290,13 +1655,34 @@ SbTerminal *sb_terminal_new(void) {
   gtk_widget_add_controller(self->widget,
                              GTK_EVENT_CONTROLLER(self->right_click_gesture));
 
-  /* Ctrl+left-click to open URLs */
-  GtkGesture *link_click = GTK_GESTURE(gtk_gesture_click_new());
-  gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(link_click),
+  /* Left-click: Ctrl+click → URL, double-click → word,
+     triple-click → line, Shift+click → extend selection */
+  GtkGesture *left_click = GTK_GESTURE(gtk_gesture_click_new());
+  gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(left_click),
                                 GDK_BUTTON_PRIMARY);
-  g_signal_connect(link_click, "pressed",
-                   G_CALLBACK(link_click_pressed), self);
-  gtk_widget_add_controller(self->widget, GTK_EVENT_CONTROLLER(link_click));
+  g_signal_connect(left_click, "pressed",
+                   G_CALLBACK(left_click_pressed), self);
+  g_signal_connect(left_click, "released",
+                   G_CALLBACK(left_click_released), self);
+  gtk_widget_add_controller(self->widget, GTK_EVENT_CONTROLLER(left_click));
+
+  /* Middle-click to paste */
+  GtkGesture *middle_click = GTK_GESTURE(gtk_gesture_click_new());
+  gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(middle_click),
+                                GDK_BUTTON_MIDDLE);
+  g_signal_connect(middle_click, "pressed",
+                   G_CALLBACK(middle_click_pressed), self);
+  gtk_widget_add_controller(self->widget, GTK_EVENT_CONTROLLER(middle_click));
+
+  /* Motion controller for URL hover and cursor tracking */
+  self->motion_controller = gtk_event_controller_motion_new();
+  g_signal_connect(self->motion_controller, "enter",
+                   G_CALLBACK(on_motion_enter), self);
+  g_signal_connect(self->motion_controller, "motion",
+                   G_CALLBACK(on_motion), self);
+  g_signal_connect(self->motion_controller, "leave",
+                   G_CALLBACK(on_motion_leave), self);
+  gtk_widget_add_controller(self->widget, self->motion_controller);
 
   self->context_menu = NULL;
 
@@ -1311,6 +1697,10 @@ void sb_terminal_free(SbTerminal *self) {
 
   if (self->cursor_timer > 0)
     g_source_remove(self->cursor_timer);
+  if (self->scroll_anim_timer > 0)
+    g_source_remove(self->scroll_anim_timer);
+  if (self->follow_timer > 0)
+    g_source_remove(self->follow_timer);
 
   if (self->pty_source > 0)
     g_source_remove(self->pty_source);
@@ -1324,6 +1714,7 @@ void sb_terminal_free(SbTerminal *self) {
   if (self->context_menu)
     gtk_widget_unparent(self->context_menu);
 
+  g_free(self->hover_url);
   g_free(self->keybinds);
 
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(self->widget),

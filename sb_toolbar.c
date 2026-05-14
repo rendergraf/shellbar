@@ -25,33 +25,6 @@ SbToolbar *sb_toolbar_new(void) {
 
   gtk_widget_add_css_class(self->widget, "sb-toolbar");
 
-  GtkCssProvider *provider = gtk_css_provider_new();
-  gtk_css_provider_load_from_string(provider,
-    ".sb-toolbar {"
-    "  background-color: rgba(30, 30, 30, 0.95);"
-    "  border-top: 1px solid rgba(255, 255, 255, 0.08);"
-    "}"
-    ".sb-toolbar button {"
-    "  background-color: rgba(255, 255, 255, 0.06);"
-    "  border-radius: 4px;"
-    "  border: none;"
-    "  padding: 4px 10px;"
-    "  color: #eaeaea;"
-    "  font-size: 12px;"
-    "}"
-    ".sb-toolbar button:hover {"
-    "  background-color: rgba(255, 255, 255, 0.12);"
-    "}"
-    ".sb-toolbar button:active {"
-    "  background-color: rgba(255, 255, 255, 0.18);"
-    "}"
-  );
-  gtk_style_context_add_provider_for_display(
-    gtk_widget_get_display(self->widget),
-    GTK_STYLE_PROVIDER(provider),
-    GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-  g_object_unref(provider);
-
   return self;
 }
 

@@ -33,20 +33,24 @@ static const SbConfigKeybind default_keybinds[] = {
 static const int default_kb_count = sizeof(default_keybinds) / sizeof(default_keybinds[0]);
 
 void sb_config_add_defaults(SbConfig *config) {
-  for (int i = 0; i < default_count; i++) {
-    config->button_count++;
-    config->buttons = g_realloc(config->buttons,
-      config->button_count * sizeof(SbConfigButton));
-    SbConfigButton *b = &config->buttons[config->button_count - 1];
-    b->name    = g_strdup(default_buttons[i].name);
-    b->command = g_strdup(default_buttons[i].command);
-    b->icon    = g_strdup(default_buttons[i].icon);
+  if (config->button_count == 0) {
+    for (int i = 0; i < default_count; i++) {
+      config->button_count++;
+      config->buttons = g_realloc(config->buttons,
+        config->button_count * sizeof(SbConfigButton));
+      SbConfigButton *b = &config->buttons[config->button_count - 1];
+      b->name    = g_strdup(default_buttons[i].name);
+      b->command = g_strdup(default_buttons[i].command);
+      b->icon    = g_strdup(default_buttons[i].icon);
+    }
   }
-  for (int i = 0; i < default_kb_count; i++) {
-    config->keybind_count++;
-    config->keybinds = g_realloc(config->keybinds,
-      config->keybind_count * sizeof(SbConfigKeybind));
-    config->keybinds[config->keybind_count - 1] = default_keybinds[i];
+  if (config->keybind_count == 0) {
+    for (int i = 0; i < default_kb_count; i++) {
+      config->keybind_count++;
+      config->keybinds = g_realloc(config->keybinds,
+        config->keybind_count * sizeof(SbConfigKeybind));
+      config->keybinds[config->keybind_count - 1] = default_keybinds[i];
+    }
   }
 }
 
@@ -245,10 +249,10 @@ SbConfig *sb_config_load(void) {
   SbConfig *config = g_malloc0(sizeof(SbConfig));
 
   char *path = config_path();
-  if (!path) return config;
+  if (!path) { sb_config_add_defaults(config); return config; }
 
   FILE *f = fopen(path, "r");
-  if (!f) { g_free(path); return config; }
+  if (!f) { sb_config_add_defaults(config); g_free(path); return config; }
   g_free(path);
 
   char line[4096];
@@ -295,7 +299,12 @@ SbConfig *sb_config_load(void) {
   }
 
   fclose(f);
-  g_printerr("[shellbar] loaded %d buttons\n", config->button_count);
+
+  /* Ensure at least the default keybinds are always present */
+  sb_config_add_defaults(config);
+
+  g_printerr("[shellbar] loaded %d buttons, %d keybinds\n",
+             config->button_count, config->keybind_count);
   return config;
 }
 

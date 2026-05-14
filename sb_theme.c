@@ -17,7 +17,7 @@ static const SbTheme cyber_theme = {
   .name = "cyber",
   .display_name = "Cyber",
 
-  .background      = RGB(11, 13, 18),
+  .background      = RGB(0B, 0D, 12),
   .surface         = RGB(1A, 1D, 24),
   .header          = RGB(20, 24, 2D),
   .border          = RGB(2C, 31, 3C),
@@ -140,6 +140,26 @@ void sb_theme_apply_to_display(GdkDisplay *display, const SbTheme *theme) {
     ".sb-chrome button:hover {"
     "  background-color: alpha(%s, 0.08);"
     "}"
+    /* Toolbar (command buttons bar) */
+    ".sb-toolbar {"
+    "  background-color: alpha(%s, 0.08);"
+    "  border-top: 1px solid alpha(%s, 0.06);"
+    "  border-radius: 4px;"
+    "}"
+    ".sb-toolbar button {"
+    "  background-color: alpha(%s, 0.06);"
+    "  border-radius: 4px;"
+    "  border: none;"
+    "  padding: 4px 10px;"
+    "  color: %s;"
+    "  font-size: 10px;"
+    "}"
+    ".sb-toolbar button:hover {"
+    "  background-color: alpha(%s, 0.4);"
+    "}"
+    ".sb-toolbar button:active {"
+    "  background-color: alpha(%s, 0.01);"
+    "}"
     /* Tab pill colors driven by the theme */
     ".sb-tab-row { background: alpha(%s, 0.10); border-radius: 6px;"
     "  padding: 0; margin: 0 2px; }"
@@ -173,6 +193,13 @@ void sb_theme_apply_to_display(GdkDisplay *display, const SbTheme *theme) {
     text_pri,
     /* .sb-chrome button:hover bg uses text_pri base */
     text_pri,
+    /* .sb-toolbar */
+    accent_blue,
+    text_pri,
+    /* .sb-toolbar button */
+    text_pri, text_pri,
+    /* .sb-toolbar button:hover/active */
+    accent_blue, accent_blue,
     /* .sb-tab-row */
     text_sec, text_sec, accent_blue, accent_blue,
     /* .sb-tab-button */

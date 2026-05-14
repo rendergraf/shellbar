@@ -272,6 +272,15 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller,
 
   SbTerminal *term = active_terminal(self);
   if (!term) return GDK_EVENT_PROPAGATE;
+
+  /* Don't intercept keys if focus is outside the terminal (e.g. in a dialog) */
+  GtkWidget *focus_widget = gtk_root_get_focus(GTK_ROOT(self));
+  if (focus_widget) {
+    GtkWidget *term_widget = sb_terminal_get_widget(term);
+    if (term_widget && !gtk_widget_is_ancestor(focus_widget, term_widget))
+      return GDK_EVENT_PROPAGATE;
+  }
+
   return sb_terminal_handle_key(term, keyval, keycode, state);
 }
 
@@ -314,12 +323,21 @@ static void on_pref_reload(gpointer data) {
   sb_window_reload_config((SbWindow *)data);
 }
 
+static void on_pref_closed(gpointer data) {
+  SbWindow *self = data;
+  SbTerminal *term = active_terminal(self);
+  if (term) {
+    GtkWidget *widget = sb_terminal_get_widget(term);
+    gtk_widget_grab_focus(widget);
+  }
+}
+
 static void act_preferences(GSimpleAction *action, GVariant *param,
                              gpointer userdata) {
   (void)action;
   (void)param;
   sb_preferences_dialog_show(GTK_WINDOW(userdata), userdata,
-                             on_pref_reload);
+                             on_pref_reload, on_pref_closed, userdata);
 }
 
 static void act_about(GSimpleAction *action, GVariant *param,
@@ -340,6 +358,11 @@ static void act_about(GSimpleAction *action, GVariant *param,
     "authors", authors,
     "logo-icon-name", "shellbar",
     NULL);
+  SbTerminal *term = active_terminal(self);
+  if (term) {
+    GtkWidget *widget = sb_terminal_get_widget(term);
+    gtk_widget_grab_focus(widget);
+  }
 }
 
 static void act_quit(GSimpleAction *action, GVariant *param,
@@ -418,7 +441,7 @@ static int sighup_pipe[2] = {-1, -1};
 
 static void sighup_handler(int sig) {
   (void)sig;
-  if (sighup_pipe[1] >= 0) write(sighup_pipe[1], "", 1);
+  if (sighup_pipe[1] >= 0) { (void)write(sighup_pipe[1], "", 1); }
 }
 
 static gboolean on_sighup_io(GIOChannel *ch, GIOCondition cond,

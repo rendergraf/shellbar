@@ -9,6 +9,8 @@
 #include <adwaita.h>
 
 void sb_preferences_dialog_show(GtkWindow *parent, gpointer reload_target,
-                                void (*on_reload)(gpointer));
+                                void (*on_reload)(gpointer),
+                                void (*on_close)(gpointer),
+                                gpointer close_data);
 
 #endif
