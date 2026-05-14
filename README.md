@@ -62,11 +62,16 @@ to run any command on the active terminal.
 
 - Full terminal with VT100-520, 256 colors, true color, Kitty protocol support
 - **Configurable toolbar** with command buttons from `~/.config/shellbar/config`
-- **Text selection** via mouse drag with visual highlight
-- **Copy / Paste** (Ctrl+Shift+C / Ctrl+Shift+V) with GTK clipboard
+- **Text selection** with copy-on-select, mouse drag, double-click word, triple-click line
+- **Copy / Paste** (Ctrl+Shift+C / Ctrl+Shift+V) with GTK clipboard, middle-click paste
+- **Shift+Click** and **Shift+Arrow keys** extend selection
+- **URL detection** with hover underline, pointer cursor, and Ctrl+Click to open
+- **Smooth animated auto-scroll** to bottom on Enter key
+- **I-beam cursor** for text selection areas
+- **Drag-and-drop reorder** in Preferences dialog
 - **Right-click context menu**: Copy, Paste, Select All
 - **Configurable keybinds** in config file
-- **Tabs** with `Adw.TabBar` + `Adw.TabView`, each with its own shell
+- **Tabs** with `AdwTabBar` + `AdwTabView`, each with its own shell
 - Dynamic tab titles (OSC 0/2 from the shell)
 - Visual Ghostty clone (dark theme, GTK4/libadwaita, no window title)
 - Infinite scrollback (configurable)
@@ -150,7 +155,7 @@ If the config file doesn't exist, default buttons and keybinds are used.
 kill -HUP $(pidof shellbar)
 ```
 
-## Keyboard shortcuts
+## Interaction shortcuts
 
 | Shortcut | Action |
 |----------|--------|
@@ -159,6 +164,21 @@ kill -HUP $(pidof shellbar)
 | `Ctrl+Shift+V` | Paste |
 | `Ctrl+Shift+A` | Select all |
 | `Alt+1`..`Alt+9`, `Alt+0` | Execute toolbar buttons 1–10 |
+| `Shift+Click` | Extend selection to clicked position |
+| `Shift+←` `Shift+→` `Shift+↑` `Shift+↓` | Extend selection by one cell |
+| `Ctrl+Click` on URL | Open URL in default browser |
+
+### Mouse interactions
+
+| Action | Result |
+|--------|--------|
+| Drag | Select text (top-to-bottom and bottom-to-top) |
+| Double-click | Select word |
+| Triple-click | Select entire line |
+| Middle-click | Paste from clipboard |
+| Right-click | Context menu (Copy / Paste / Select All) |
+| Hover over URL | Underline highlight + pointer cursor + "Ctrl+Click" tooltip |
+| Hover over text | I-beam cursor for selection |
 
 ### Keybind configuration
 
