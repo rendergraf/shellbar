@@ -1,4 +1,4 @@
-# ShellBar v1.3
+# ShellBar v1.4.0
 
 > **Ghostty-like terminal emulator with a workflow toolbar — for Linux.**
 > ShellBar is **NOT a fork**. It uses `libghostty-vt` as a library via CMake FetchContent, maintaining complete independence from upstream Ghostty.
@@ -20,6 +20,7 @@
 </p>
 <p align="center">
   <img src="assets/screenshot-3.png" alt="ShellBar terminal with config" width="48%">
+  <img src="assets/screenshot-4.png" alt="ShellBar utility bar and TUI tools" width="48%">
 </p>
 
 ## Tech Stack
