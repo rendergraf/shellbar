@@ -32,6 +32,8 @@ add_executable(shellbar
   sb_theme.c
 )
 
+file(GLOB ICON_FILES assets/icon-*.png assets/icon.svg assets/logo.png)
+
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/shellbar-resources.c
   COMMAND glib-compile-resources
@@ -39,6 +41,7 @@ add_custom_command(
     --generate-source
     ${CMAKE_CURRENT_SOURCE_DIR}/shellbar.gresource.xml
   DEPENDS shellbar.gresource.xml
+          ${ICON_FILES}
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   COMMENT "Compiling GResource: shellbar.gresource.xml"
 )

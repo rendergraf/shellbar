@@ -63,6 +63,12 @@ if command -v gtk4-update-icon-cache >/dev/null 2>&1; then
 elif command -v gtk-update-icon-cache >/dev/null 2>&1; then
     gtk-update-icon-cache /usr/share/icons/hicolor/ || true
 fi
+# KDE icon cache
+if command -v kbuildsycoca6 >/dev/null 2>&1; then
+    kbuildsycoca6 --noincremental 2>/dev/null || true
+elif command -v kbuildsycoca5 >/dev/null 2>&1; then
+    kbuildsycoca5 --noincremental 2>/dev/null || true
+fi
 EOF
 chmod +x "$PKG_ROOT/DEBIAN/postinst"
 
