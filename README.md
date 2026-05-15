@@ -91,8 +91,8 @@ to run any command on the active terminal.
 ### Debian/Ubuntu (pre-built .deb)
 
 ```sh
-curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.3_amd64.deb
-sudo dpkg -i shellbar_1.3_amd64.deb
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.3.1_amd64.deb
+sudo dpkg -i shellbar_1.3.1_amd64.deb
 sudo apt-get install -f
 ```
 
