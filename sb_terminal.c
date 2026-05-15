@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.1 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.3 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -934,7 +934,7 @@ static bool effect_device_attributes(GhosttyTerminal terminal, void *userdata,
 static GhosttyString effect_xtversion(GhosttyTerminal terminal, void *userdata) {
   (void)terminal;
   (void)userdata;
-  return (GhosttyString){ .ptr = (const uint8_t *)"shellbar 1.1", .len = 13 };
+  return (GhosttyString){ .ptr = (const uint8_t *)"shellbar 1.3", .len = 13 };
 }
 
 static bool effect_color_scheme(GhosttyTerminal terminal, void *userdata,
@@ -1569,6 +1569,11 @@ SbTerminal *sb_terminal_new(void) {
   pango_layout_get_pixel_size(tmp, &self->cell_width, &self->cell_height);
   g_object_unref(tmp);
 
+  /* Enforce a minimum grid of 80×24 so tools like btop always fit */
+  gtk_widget_set_size_request(self->widget,
+      80 * self->cell_width  + self->padding * 2,
+      24 * self->cell_height + self->padding * 2);
+
   /* Terminal */
   GhosttyTerminalOptions opts = {
     .cols = self->cols,
@@ -1739,6 +1744,11 @@ GtkWidget *sb_terminal_get_widget(SbTerminal *self) {
 
 int sb_terminal_get_pty_fd(SbTerminal *self) {
   return self->pty_fd;
+}
+
+void sb_terminal_get_cell_size(SbTerminal *self, int *cell_width, int *cell_height) {
+  if (cell_width) *cell_width = self->cell_width;
+  if (cell_height) *cell_height = self->cell_height;
 }
 
 void sb_terminal_write(SbTerminal *self, const char *data, size_t len) {

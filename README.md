@@ -1,4 +1,4 @@
-# ShellBar v1.2
+# ShellBar v1.3
 
 > **Ghostty-like terminal emulator with a workflow toolbar — for Linux.**
 > ShellBar is **NOT a fork**. It uses `libghostty-vt` as a library via CMake FetchContent, maintaining complete independence from upstream Ghostty.
@@ -69,6 +69,10 @@ to run any command on the active terminal.
 - **Smooth animated auto-scroll** to bottom on Enter key
 - **I-beam cursor** for text selection areas
 - **Drag-and-drop reorder** in Preferences dialog
+- **Utility bar** — auto-detects installed TUI tools (btop, htop, lazygit, etc.) and launches them in the active terminal
+- **iOS-style toggle switches** for toolbar and utility bar with Cairo-drawn animated controls
+- **Improved keyboard focus** — capture-phase key handler ensures keystrokes reach the terminal even after tab close or dialog interaction
+- **Minimum terminal size** (80×24) enforced to fit tools like btop
 - **Right-click context menu**: Copy, Paste, Select All
 - **Configurable keybinds** in config file
 - **Tabs** with `AdwTabBar` + `AdwTabView`, each with its own shell
@@ -87,8 +91,8 @@ to run any command on the active terminal.
 ### Debian/Ubuntu (pre-built .deb)
 
 ```sh
-curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.2_amd64.deb
-sudo dpkg -i shellbar_1.2_amd64.deb
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.3_amd64.deb
+sudo dpkg -i shellbar_1.3_amd64.deb
 sudo apt-get install -f
 ```
 

@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.1 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.3 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -18,6 +18,7 @@ SbTerminal *sb_terminal_new(void);
 void sb_terminal_free(SbTerminal *terminal);
 GtkWidget *sb_terminal_get_widget(SbTerminal *terminal);
 int sb_terminal_get_pty_fd(SbTerminal *terminal);
+void sb_terminal_get_cell_size(SbTerminal *terminal, int *cell_width, int *cell_height);
 void sb_terminal_write(SbTerminal *terminal, const char *data, size_t len);
 void sb_terminal_write_str(SbTerminal *terminal, const char *str);
 void sb_terminal_set_title_callback(SbTerminal *terminal, SbTerminalTitleCb cb, void *userdata);

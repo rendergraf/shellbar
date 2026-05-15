@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.1 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.3 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */

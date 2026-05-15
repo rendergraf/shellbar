@@ -4,7 +4,7 @@
 set -e
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION="${1:-1.1.0}"
+VERSION="${1:-1.3.0}"
 DEB_NAME="shellbar_${VERSION}_amd64.deb"
 BUILD_DIR="$PROJECT_DIR/build"
 DEB_PATH="$BUILD_DIR/$DEB_NAME"
