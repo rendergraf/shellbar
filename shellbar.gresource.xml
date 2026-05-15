@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gresources>
-  <gresource prefix="/com/shellbar/icons/hicolor">
+  <gresource prefix="/com/shellbar/icons">
     <file alias="16x16/apps/shellbar.png" compressed="true">assets/icon-16.png</file>
     <file alias="32x32/apps/shellbar.png" compressed="true">assets/icon-32.png</file>
     <file alias="48x48/apps/shellbar.png" compressed="true">assets/icon-48.png</file>

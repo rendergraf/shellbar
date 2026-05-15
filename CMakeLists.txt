@@ -32,7 +32,7 @@ add_executable(shellbar
   sb_theme.c
 )
 
-file(GLOB ICON_FILES assets/icon-*.png assets/icon.svg assets/logo.png)
+file(GLOB ICON_FILES CONFIGURE_DEPENDS assets/icon-*.png assets/icon.svg assets/logo.png)
 
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/shellbar-resources.c
