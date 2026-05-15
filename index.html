@@ -381,7 +381,10 @@
         if (index >= total) index = 0;
         current = index;
         const slide = slides[current];
-        slide.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+        carousel.scrollTo({
+          left: slide.offsetLeft - carousel.offsetLeft,
+          behavior: 'smooth'
+        });
         updateDots();
       }
 
