@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,428 +10,304 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
   <link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png">
   <link rel="apple-touch-icon" sizes="128x128" href="logo.png">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', monospace;
-      background: #0B0D12;
-      color: #E6EAF2;
-      line-height: 1.6;
-      min-height: 100vh;
-    }
-    .container { max-width: 900px; margin: 0 auto; padding: 0 24px; }
-
-    .hero {
-      text-align: center;
-      padding: 100px 0 60px;
-      border-bottom: 1px solid #2C313C;
-    }
-    .hero-icon { width: 96px; height: 96px; margin-bottom: 24px; border-radius: 20px; }
-    .hero h1 {
-      font-size: 48px;
-      font-weight: 700;
-      color: #4DA3FF;
-      margin-bottom: 12px;
-      letter-spacing: -1px;
-    }
-    .hero .tagline {
-      font-size: 18px;
-      color: #9AA4B2;
-      max-width: 620px;
-      margin: 0 auto 16px;
-    }
-    .hero .not-fork {
-      display: inline-block;
-      background: rgba(77,163,255,0.10);
-      color: #4DA3FF;
-      font-size: 13px;
-      font-weight: 600;
-      padding: 3px 12px;
-      border-radius: 20px;
-      border: 1px solid rgba(77,163,255,0.2);
-      margin-bottom: 24px;
-    }
-
-    .btn-group { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-    .btn {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 10px 24px; border-radius: 6px;
-      font-size: 14px; font-weight: 600; text-decoration: none;
-      transition: all 0.15s ease;
-    }
-    .btn-primary {
-      background: #7EE787; color: #0B0D12; border: 1px solid #7EE787;
-    }
-    .btn-primary:hover { background: #9DF0A2; }
-    .btn-secondary {
-      background: #20242D; color: #E6EAF2; border: 1px solid #2C313C;
-    }
-    .btn-secondary:hover { background: #2C313C; }
-
-    .badges {
-      display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
-      margin-top: 28px;
-    }
-    .badges img { height: 20px; }
-
-    section { padding: 64px 0; }
-    section:nth-child(even) { background: #0B0D12; }
-    section:nth-child(odd) { background: #111318; }
-    section h2 {
-      font-size: 28px; color: #E6EAF2; margin-bottom: 32px;
-      text-align: center; font-weight: 600;
-    }
-
-    .features {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 20px;
-    }
-    .feature {
-      background: #0B0D12; border: 1px solid #2C313C; border-radius: 8px;
-      padding: 24px; transition: border-color 0.15s;
-    }
-    .feature:hover { border-color: #4DA3FF; }
-    .feature h3 { font-size: 16px; color: #4DA3FF; margin-bottom: 8px; }
-    .feature p { font-size: 13px; color: #9AA4B2; }
-
-    /* ---- Carousel ---- */
-    .carousel-wrap {
-      position: relative;
-      max-width: 680px;
-      margin: 0 auto;
-    }
-    .carousel {
-      display: flex;
-      overflow-x: auto;
-      scroll-snap-type: x mandatory;
-      -webkit-overflow-scrolling: touch;
-      scroll-behavior: smooth;
-      gap: 0;
-      border-radius: 10px;
-      border: 1px solid #2C313C;
-      background: #111318;
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-    .carousel::-webkit-scrollbar { display: none; }
-    .carousel-slide {
-      flex: 0 0 100%;
-      scroll-snap-align: start;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-    .carousel-slide img {
-      width: 100%;
-      height: auto;
-      display: block;
-      border-radius: 9px;
-    }
-    .carousel-dots {
-      display: flex;
-      justify-content: center;
-      gap: 10px;
-      margin-top: 18px;
-    }
-    .carousel-dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      background: #2C313C;
-      border: none;
-      cursor: pointer;
-      transition: background 0.25s;
-      padding: 0;
-    }
-    .carousel-dot.active {
-      background: #4DA3FF;
-    }
-    .carousel-dot:hover {
-      background: #9AA4B2;
-    }
-
-    .install-box {
-      background: #1A1D24;
-      border: 1px solid #2C313C;
-      border-radius: 8px;
-      padding: 24px;
-      max-width: 600px;
-      margin: 0 auto;
-    }
-    .install-box code {
-      display: block;
-      background: #0B0D12;
-      padding: 12px 16px;
-      border-radius: 4px;
-      margin-top: 12px;
-      font-size: 13px;
-      color: #56D4DD;
-      overflow-x: auto;
-    }
-
-    .not-fork-banner {
-      background: rgba(77,163,255,0.06);
-      border: 1px solid rgba(77,163,255,0.15);
-      border-radius: 8px;
-      padding: 20px 24px;
-      max-width: 700px;
-      margin: 0 auto;
-      text-align: center;
-    }
-    .not-fork-banner h3 { color: #4DA3FF; font-size: 16px; margin-bottom: 8px; }
-    .not-fork-banner p { color: #9AA4B2; font-size: 13px; }
-
-    footer {
-      text-align: center;
-      padding: 40px 0;
-      font-size: 12px;
-      color: #2C313C;
-    }
-    footer a { color: #4DA3FF; text-decoration: none; }
-    footer a:hover { text-decoration: underline; }
-
-    @media (max-width: 600px) {
-      .hero { padding: 60px 0 40px; }
-      .hero h1 { font-size: 32px; }
-      .hero .tagline { font-size: 15px; }
-    }
-  </style>
-</head>
-<body>
-
-  <section style="background:#0B0D12;">
-    <div class="hero container">
-      <img class="hero-icon" src="logo.png" alt="ShellBar logo">
-      <h1>ShellBar</h1>
-      <p class="tagline">
-        A Ghostty-like terminal emulator with a configurable workflow toolbar.
-        Built on libghostty-vt for Linux.
-      </p>
-      <p class="not-fork">NOT a fork — independent library consumer</p>
-      <div class="btn-group">
-        <a href="https://github.com/rendergraf/shellbar/releases/latest" class="btn btn-primary">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-          Download .deb
-        </a>
-        <a href="https://github.com/rendergraf/shellbar" class="btn btn-secondary">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-          View on GitHub
-        </a>
-      </div>
-      <div class="badges">
-        <img src="https://img.shields.io/badge/C-11-A8B9CC?logo=c&style=flat" alt="C11">
-        <img src="https://img.shields.io/badge/GTK4-4.12+-7FE719?logo=gtk&style=flat" alt="GTK4">
-        <img src="https://img.shields.io/badge/libghostty--vt-VT_Engine-8257D0?logo=ghostty&style=flat" alt="libghostty-vt">
-        <img src="https://img.shields.io/badge/Cairo-Render-F03C15?logo=cairo&style=flat" alt="Cairo">
-        <img src="https://img.shields.io/badge/Pango-Text-EB5E00?logo=pango&style=flat" alt="Pango">
-        <img src="https://img.shields.io/badge/Zig-0.15.2+-F7A41D?logo=zig&style=flat" alt="Zig">
-        <img src="https://img.shields.io/badge/NOT_a_fork-independent-8257D0" alt="Not a fork">
-      </div>
-    </div>
-  </section>
-
-  <section id="screenshots">
-    <div class="container">
-      <h2>Screenshots</h2>
-      <div class="carousel-wrap">
-        <div class="carousel" id="carousel">
-          <div class="carousel-slide"><img src="screenshot-1.png" alt="ShellBar terminal with workflow toolbar"></div>
-          <div class="carousel-slide"><img src="screenshot-2.png" alt="ShellBar terminal with multiple tabs"></div>
-          <div class="carousel-slide"><img src="screenshot-3.png" alt="ShellBar preferences and configuration"></div>
-        </div>
-        <div class="carousel-dots" id="carousel-dots"></div>
-      </div>
-    </div>
-  </section>
-
-  <section id="features">
-    <div class="container">
-      <h2>Features</h2>
-      <div class="features">
-        <div class="feature">
-          <h3>Configurable Toolbar</h3>
-          <p>Launch any command with a single click. Define buttons in ~/.config/shellbar/config with name, command, and icon.</p>
-        </div>
-        <div class="feature">
-          <h3>Ghostty VT Engine</h3>
-          <p>Full VT100-520 emulation, 256 colors, true color, and Kitty graphics protocol — powered by libghostty-vt.</p>
-        </div>
-        <div class="feature">
-          <h3>Multiple Tabs</h3>
-          <p>Each tab runs its own shell with independent PTY. Dynamic titles via OSC 0/2. Ctrl+T to create new tabs.</p>
-        </div>
-        <div class="feature">
-          <h3>Text Selection, Mouse &amp; Clipboard</h3>
-          <p>Copy-on-select, double-click word, triple-click line. URL hover underline with Ctrl+Click. Middle-click paste. Smooth auto-scroll.</p>
-        </div>
-        <div class="feature">
-          <h3>Keybinds &amp; DnD Prefs</h3>
-          <p>Drag-and-drop reorder in preferences. Customize copy, paste, select-all shortcuts in the config file using key="c" mods="ctrl+shift" format.</p>
-        </div>
-        <div class="feature">
-          <h3>Utility Bar</h3>
-          <p>Auto-detects installed TUI tools (btop, htop, lazygit, vim, tmux…) and launches them in the active terminal.</p>
-        </div>
-        <div class="feature">
-          <h3>Hot Reload</h3>
-          <p>Edit your config and send SIGHUP to reload buttons and keybinds instantly — no restart needed.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <div class="container">
-      <div class="not-fork-banner">
-        <h3>ShellBar is NOT a fork of Ghostty</h3>
-        <p>
-          ShellBar uses <code style="color:#56D4DD;">libghostty-vt</code> as a library via CMake <code style="color:#56D4DD;">FetchContent</code> &mdash;
-          no patches, no upstream modifications, no merge conflicts.
-          This keeps the project independent, lightweight, and easy to maintain
-          while benefiting from Ghostty's industry-leading VT engine.
-        </p>
-      </div>
-    </div>
-  </section>
-
-  <section id="install">
-    <div class="container">
-      <h2>Install</h2>
-      <div class="install-box">
-        <p style="color:#7EE787;font-size:14px;margin-bottom:8px;">Debian/Ubuntu — pre-built .deb</p>
-        <code>curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.3.1_amd64.deb<br>sudo dpkg -i shellbar_1.3.1_amd64.deb<br>sudo apt-get install -f</code>
-        <p style="color:#9AA4B2;font-size:14px;margin:16px 0 8px;">Build from source</p>
-        <code>git clone https://github.com/rendergraf/shellbar<br>cd shellbar<br>cmake -B build -G Ninja<br>cmake --build build<br>./build/shellbar</code>
-        <p style="color:#9AA4B2;font-size:13px;margin-top:12px;">
-          <a href="https://github.com/rendergraf/shellbar/releases/latest" style="color:#4DA3FF;">Latest release →</a>
-        </p>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <div class="container" style="text-align:center;">
-      <h2>Configuration</h2>
-      <p style="color:#9AA4B2;font-size:14px;max-width:600px;margin:0 auto 24px;">
-        ShellBar uses a <code style="color:#56D4DD;">key = value</code> format compatible with Ghostty.
-        Create <code style="color:#56D4DD;">~/.config/shellbar/config</code> to define your buttons and keybinds.
-      </p>
-      <div style="background:#0B0D12;border:1px solid #2C313C;border-radius:8px;overflow:hidden;max-width:600px;margin:0 auto;text-align:left;">
-        <div style="background:#1A1D24;padding:8px 12px;border-bottom:1px solid #2C313C;">
-          <span style="font-size:12px;color:#9AA4B2;">~/.config/shellbar/config</span>
-        </div>
-        <div style="padding:16px;font-size:13px;line-height:1.7;">
-          <span style="color:#9AA4B2;"># Toolbar buttons</span><br>
-          <span style="color:#56D4DD;">toolbar-button</span> = name=<span style="color:#FFB86C;">"Storybook"</span>, command=<span style="color:#FFB86C;">"pnpm storybook"</span>, icon=<span style="color:#FFB86C;">"media-playback-start"</span><br>
-          <span style="color:#56D4DD;">toolbar-button</span> = name=<span style="color:#FFB86C;">"Build"</span>, command=<span style="color:#FFB86C;">"pnpm build"</span>, icon=<span style="color:#FFB86C;">"emblem-system"</span><br>
-          <span style="color:#56D4DD;">toolbar-button</span> = name=<span style="color:#FFB86C;">"Test"</span>, command=<span style="color:#FFB86C;">"pnpm test"</span>, icon=<span style="color:#FFB86C;">"emblem-default"</span><br>
-          <br>
-          <span style="color:#9AA4B2;"># Keybinds</span><br>
-          <span style="color:#56D4DD;">keybind</span> = action=<span style="color:#FFB86C;">"copy"</span>, key=<span style="color:#FFB86C;">"c"</span>, mods=<span style="color:#FFB86C;">"ctrl+shift"</span><br>
-          <span style="color:#56D4DD;">keybind</span> = action=<span style="color:#FFB86C;">"paste"</span>, key=<span style="color:#FFB86C;">"v"</span>, mods=<span style="color:#FFB86C;">"ctrl+shift"</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <footer>
-    <div class="container">
-      <p>
-        <strong>ShellBar v1.3</strong> &mdash; MIT License &copy; 2026
-        <a href="https://github.com/rendergraf">Xavier Araque</a>
-      </p>
-      <p style="margin-top:4px;">
-        Built with <a href="https://github.com/ghostty-org/ghostty">Ghostty</a>'s VT engine &middot;
-        <a href="https://github.com/rendergraf/shellbar">GitHub</a>
-      </p>
-    </div>
-  </footer>
-
+  <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    (function() {
-      const carousel = document.getElementById('carousel');
-      const slides = carousel.querySelectorAll('.carousel-slide');
-      const dotsContainer = document.getElementById('carousel-dots');
-      const total = slides.length;
-      let current = 0;
-      let autoplayTimer = null;
-      const INTERVAL = 4000;
-
-      function createDots() {
-        for (let i = 0; i < total; i++) {
-          const dot = document.createElement('button');
-          dot.className = 'carousel-dot' + (i === 0 ? ' active' : '');
-          dot.setAttribute('aria-label', 'Slide ' + (i + 1));
-          dot.addEventListener('click', function() {
-            goTo(i);
-            resetAutoplay();
-          });
-          dotsContainer.appendChild(dot);
-        }
-      }
-
-      function updateDots() {
-        const dots = dotsContainer.querySelectorAll('.carousel-dot');
-        dots.forEach(function(d, i) {
-          d.classList.toggle('active', i === current);
-        });
-      }
-
-      function goTo(index) {
-        if (index < 0) index = total - 1;
-        if (index >= total) index = 0;
-        current = index;
-        const slide = slides[current];
-        carousel.scrollTo({
-          left: slide.offsetLeft - carousel.offsetLeft,
-          behavior: 'smooth'
-        });
-        updateDots();
-      }
-
-      function next() {
-        goTo(current + 1);
-      }
-
-      function startAutoplay() {
-        stopAutoplay();
-        autoplayTimer = setInterval(next, INTERVAL);
-      }
-
-      function stopAutoplay() {
-        if (autoplayTimer) {
-          clearInterval(autoplayTimer);
-          autoplayTimer = null;
-        }
-      }
-
-      function resetAutoplay() {
-        startAutoplay();
-      }
-
-      carousel.addEventListener('scroll', function() {
-        var rect = carousel.getBoundingClientRect();
-        var closest = 0;
-        var closestDist = Infinity;
-        slides.forEach(function(slide, i) {
-          var slideRect = slide.getBoundingClientRect();
-          var dist = Math.abs(slideRect.left - rect.left);
-          if (dist < closestDist) {
-            closestDist = dist;
-            closest = i;
-          }
-        });
-        if (closest !== current) {
-          current = closest;
-          updateDots();
-        }
-      });
-
-      carousel.addEventListener('mouseenter', stopAutoplay);
-      carousel.addEventListener('mouseleave', startAutoplay);
-
-      createDots();
-      startAutoplay();
-    })();
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+          },
+        },
+      },
+    }
   </script>
+</head>
+<body class="bg-[#0B0D12] text-white antialiased overflow-x-hidden">
+
+<div class="fixed inset-0 pointer-events-none">
+  <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(77,163,255,0.18),transparent_60%)]"></div>
+</div>
+
+<!-- HERO -->
+<section class="relative pt-28 pb-20 text-center">
+  <div class="max-w-3xl mx-auto px-6">
+    <img src="logo.png" alt="ShellBar logo"
+         class="w-24 h-24 mx-auto rounded-2xl shadow-xl shadow-blue-500/20 mb-6">
+
+    <h1 class="text-[56px] font-semibold tracking-tight text-white leading-tight">
+      ShellBar
+    </h1>
+
+    <p class="mt-5 text-lg text-gray-400 max-w-xl mx-auto leading-relaxed">
+      A Ghostty-like terminal emulator with a configurable workflow toolbar.
+      Built on libghostty-vt for Linux.
+    </p>
+
+    <div class="mt-4 inline-flex items-center px-4 py-1.5 rounded-full
+                bg-blue-500/10 text-blue-400 border border-blue-500/20 text-sm font-medium">
+      NOT a fork &mdash; independent library consumer
+    </div>
+
+    <div class="mt-10 flex gap-3 justify-center flex-wrap">
+      <a href="https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.4.0_amd64.deb"
+         class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-green-400 text-black font-semibold
+                hover:bg-green-300 transition shadow-lg shadow-green-400/20 text-sm">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        Download .deb
+      </a>
+
+      <a href="https://github.com/rendergraf/shellbar"
+         class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/5 border border-white/10
+                hover:bg-white/10 transition text-sm font-medium">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        View on GitHub
+      </a>
+    </div>
+
+    <div class="mt-10 flex flex-wrap justify-center gap-2">
+      <span class="px-3 py-1 text-xs rounded-full bg-white/5 border border-white/10 text-gray-400">C11</span>
+      <span class="px-3 py-1 text-xs rounded-full bg-white/5 border border-white/10 text-gray-400">GTK4</span>
+      <span class="px-3 py-1 text-xs rounded-full bg-white/5 border border-white/10 text-gray-400">libghostty-vt</span>
+      <span class="px-3 py-1 text-xs rounded-full bg-white/5 border border-white/10 text-gray-400">Cairo</span>
+      <span class="px-3 py-1 text-xs rounded-full bg-white/5 border border-white/10 text-gray-400">Pango</span>
+      <span class="px-3 py-1 text-xs rounded-full bg-white/5 border border-white/10 text-gray-400">Zig</span>
+      <span class="px-3 py-1 text-xs rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400">NOT a fork</span>
+    </div>
+  </div>
+</section>
+
+<!-- SCREENSHOTS CAROUSEL -->
+<section class="py-24">
+  <div class="max-w-4xl mx-auto px-6 text-center">
+    <h2 class="text-3xl font-semibold mb-12">Screenshots</h2>
+
+    <div class="relative max-w-[720px] mx-auto">
+      <div id="carousel" class="flex overflow-x-auto snap-x snap-mandatory scroll-smooth rounded-2xl border border-white/10 bg-white/[0.03] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        <div class="flex-[0_0_100%] snap-start flex justify-center items-center">
+          <img src="screenshot-1.png" alt="ShellBar terminal with workflow toolbar" class="w-full h-auto block rounded-2xl">
+        </div>
+        <div class="flex-[0_0_100%] snap-start flex justify-center items-center">
+          <img src="screenshot-2.png" alt="ShellBar terminal with multiple tabs" class="w-full h-auto block rounded-2xl">
+        </div>
+        <div class="flex-[0_0_100%] snap-start flex justify-center items-center">
+          <img src="screenshot-3.png" alt="ShellBar preferences and configuration" class="w-full h-auto block rounded-2xl">
+        </div>
+      </div>
+
+      <div id="carousel-dots" class="flex justify-center gap-2.5 mt-5"></div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="py-24 bg-white/[0.02]">
+  <div class="max-w-6xl mx-auto px-6">
+    <h2 class="text-3xl font-semibold text-center mb-16">Features</h2>
+
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+
+      <div class="p-6 rounded-2xl bg-white/[0.04] border border-white/[0.08]
+                  hover:border-blue-400/30 hover:-translate-y-0.5 transition duration-200">
+        <h3 class="text-blue-400 font-semibold mb-2 text-[15px]">Configurable Toolbar</h3>
+        <p class="text-sm text-gray-400 leading-relaxed">Launch any command with a single click. Define buttons in ~/.config/shellbar/config with name, command, and icon.</p>
+      </div>
+
+      <div class="p-6 rounded-2xl bg-white/[0.04] border border-white/[0.08]
+                  hover:border-blue-400/30 hover:-translate-y-0.5 transition duration-200">
+        <h3 class="text-blue-400 font-semibold mb-2 text-[15px]">Ghostty VT Engine</h3>
+        <p class="text-sm text-gray-400 leading-relaxed">Full VT100-520 emulation, 256 colors, true color, and Kitty graphics protocol — powered by libghostty-vt.</p>
+      </div>
+
+      <div class="p-6 rounded-2xl bg-white/[0.04] border border-white/[0.08]
+                  hover:border-blue-400/30 hover:-translate-y-0.5 transition duration-200">
+        <h3 class="text-blue-400 font-semibold mb-2 text-[15px]">Multiple Tabs</h3>
+        <p class="text-sm text-gray-400 leading-relaxed">Each tab runs its own shell with independent PTY. Dynamic titles via OSC 0/2. Ctrl+T to create new tabs.</p>
+      </div>
+
+      <div class="p-6 rounded-2xl bg-white/[0.04] border border-white/[0.08]
+                  hover:border-blue-400/30 hover:-translate-y-0.5 transition duration-200">
+        <h3 class="text-blue-400 font-semibold mb-2 text-[15px]">Clipboard UX</h3>
+        <p class="text-sm text-gray-400 leading-relaxed">Copy-on-select, double-click word, triple-click line. URL hover underline with Ctrl+Click. Middle-click paste. Smooth auto-scroll.</p>
+      </div>
+
+      <div class="p-6 rounded-2xl bg-white/[0.04] border border-white/[0.08]
+                  hover:border-blue-400/30 hover:-translate-y-0.5 transition duration-200">
+        <h3 class="text-blue-400 font-semibold mb-2 text-[15px]">Hot Reload</h3>
+        <p class="text-sm text-gray-400 leading-relaxed">Edit your config and send SIGHUP to reload buttons and keybinds instantly — no restart needed.</p>
+      </div>
+
+      <div class="p-6 rounded-2xl bg-white/[0.04] border border-white/[0.08]
+                  hover:border-blue-400/30 hover:-translate-y-0.5 transition duration-200">
+        <h3 class="text-blue-400 font-semibold mb-2 text-[15px]">Utility Bar</h3>
+        <p class="text-sm text-gray-400 leading-relaxed">Auto-detects installed TUI tools (btop, htop, lazygit, vim, tmux…) and launches them in the active terminal.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- NOT A FORK -->
+<section class="py-20">
+  <div class="max-w-[700px] mx-auto px-6 text-center">
+    <div class="p-8 rounded-2xl bg-blue-500/[0.05] border border-blue-500/10">
+      <h3 class="text-blue-400 font-semibold mb-3">ShellBar is NOT a fork of Ghostty</h3>
+      <p class="text-sm text-gray-400 leading-relaxed">
+        ShellBar uses <code class="text-cyan-400 bg-white/5 px-1.5 py-0.5 rounded text-xs">libghostty-vt</code> as a
+        library via CMake <code class="text-cyan-400 bg-white/5 px-1.5 py-0.5 rounded text-xs">FetchContent</code> —
+        no patches, no upstream modifications, no merge conflicts.
+        This keeps the project independent, lightweight, and easy to maintain
+        while benefiting from Ghostty's industry-leading VT engine.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- INSTALL -->
+<section class="py-24 bg-white/[0.02]">
+  <div class="max-w-3xl mx-auto px-6">
+    <h2 class="text-3xl font-semibold text-center mb-12">Install</h2>
+
+    <div class="space-y-6">
+      <div class="rounded-2xl bg-white/5 border border-white/10 p-6">
+        <p class="text-green-400 text-sm font-semibold mb-3">Debian / Ubuntu — pre-built .deb</p>
+        <pre class="text-xs text-gray-300 overflow-x-auto bg-white/5 rounded-xl p-4 leading-relaxed">
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.4.0_amd64.deb
+sudo dpkg -i shellbar_1.4.0_amd64.deb
+sudo apt-get install -f</pre>
+      </div>
+
+      <div class="rounded-2xl bg-white/5 border border-white/10 p-6">
+        <p class="text-gray-400 text-sm font-semibold mb-3">Build from source</p>
+        <pre class="text-xs text-gray-300 overflow-x-auto bg-white/5 rounded-xl p-4 leading-relaxed">
+git clone https://github.com/rendergraf/shellbar
+cd shellbar
+cmake -B build -G Ninja
+cmake --build build
+./build/shellbar</pre>
+      </div>
+
+      <div class="text-center">
+        <a href="https://github.com/rendergraf/shellbar/releases/latest"
+           class="inline-flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 transition">
+          Latest release
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h7v7M13 3L3 13"/></svg>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CONFIGURATION -->
+<section class="py-24">
+  <div class="max-w-[640px] mx-auto px-6 text-center">
+    <h2 class="text-3xl font-semibold mb-5">Configuration</h2>
+    <p class="text-sm text-gray-400 max-w-lg mx-auto mb-8 leading-relaxed">
+      ShellBar uses a <code class="text-cyan-400 bg-white/5 px-1.5 py-0.5 rounded text-xs">key = value</code> format
+      compatible with Ghostty. Create <code class="text-cyan-400 bg-white/5 px-1.5 py-0.5 rounded text-xs">~/.config/shellbar/config</code> to
+      define your buttons and keybinds.
+    </p>
+
+    <div class="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden text-left">
+      <div class="px-4 py-2.5 bg-white/[0.04] border-b border-white/10">
+        <span class="text-xs text-gray-500">~/.config/shellbar/config</span>
+      </div>
+      <div class="p-5 text-[13px] leading-7 font-mono">
+        <span class="text-gray-500"># Toolbar buttons</span><br>
+        <span class="text-cyan-400">toolbar-button</span> = name=<span class="text-amber-300">"Storybook"</span>, command=<span class="text-amber-300">"pnpm storybook"</span>, icon=<span class="text-amber-300">"media-playback-start"</span><br>
+        <span class="text-cyan-400">toolbar-button</span> = name=<span class="text-amber-300">"Build"</span>, command=<span class="text-amber-300">"pnpm build"</span>, icon=<span class="text-amber-300">"emblem-system"</span><br>
+        <span class="text-cyan-400">toolbar-button</span> = name=<span class="text-amber-300">"Test"</span>, command=<span class="text-amber-300">"pnpm test"</span>, icon=<span class="text-amber-300">"emblem-default"</span><br>
+        <br>
+        <span class="text-gray-500"># Keybinds</span><br>
+        <span class="text-cyan-400">keybind</span> = action=<span class="text-amber-300">"copy"</span>, key=<span class="text-amber-300">"c"</span>, mods=<span class="text-amber-300">"ctrl+shift"</span><br>
+        <span class="text-cyan-400">keybind</span> = action=<span class="text-amber-300">"paste"</span>, key=<span class="text-amber-300">"v"</span>, mods=<span class="text-amber-300">"ctrl+shift"</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="py-16 border-t border-white/10 text-center text-gray-500 text-sm">
+  <p>ShellBar v1.4.0 — MIT License &copy; 2026 <a href="https://github.com/rendergraf" class="text-blue-400 hover:underline">Xavier Araque</a></p>
+  <p class="mt-2">
+    Built on <a href="https://github.com/ghostty-org/ghostty" class="text-blue-400 hover:underline">Ghostty</a>'s
+    VT engine &middot; <a href="https://github.com/rendergraf/shellbar" class="text-blue-400 hover:underline">GitHub</a>
+  </p>
+</footer>
+
+<script>
+(function() {
+  var carousel = document.getElementById('carousel');
+  var slides = carousel.querySelectorAll('div');
+  var dotsContainer = document.getElementById('carousel-dots');
+  var total = slides.length;
+  var current = 0;
+  var autoplayTimer = null;
+  var INTERVAL = 4000;
+
+  function createDots() {
+    for (var i = 0; i < total; i++) {
+      var dot = document.createElement('button');
+      dot.className = 'w-2.5 h-2.5 rounded-full border-none cursor-pointer transition-colors duration-200 p-0' + (i === 0 ? ' bg-blue-400' : ' bg-white/15 hover:bg-white/30');
+      dot.setAttribute('aria-label', 'Slide ' + (i + 1));
+      (function(idx) {
+        dot.addEventListener('click', function() {
+          goTo(idx);
+          resetAutoplay();
+        });
+      })(i);
+      dotsContainer.appendChild(dot);
+    }
+  }
+
+  function updateDots() {
+    var dots = dotsContainer.querySelectorAll('button');
+    for (var i = 0; i < dots.length; i++) {
+      dots[i].className = 'w-2.5 h-2.5 rounded-full border-none cursor-pointer transition-colors duration-200 p-0' + (i === current ? ' bg-blue-400' : ' bg-white/15 hover:bg-white/30');
+    }
+  }
+
+  function goTo(index) {
+    if (index < 0) index = total - 1;
+    if (index >= total) index = 0;
+    current = index;
+    var slide = slides[current];
+    carousel.scrollTo({ left: slide.offsetLeft - carousel.offsetLeft, behavior: 'smooth' });
+    updateDots();
+  }
+
+  function next() { goTo(current + 1); }
+
+  function startAutoplay() {
+    stopAutoplay();
+    autoplayTimer = setInterval(next, INTERVAL);
+  }
+
+  function stopAutoplay() {
+    if (autoplayTimer) { clearInterval(autoplayTimer); autoplayTimer = null; }
+  }
+
+  function resetAutoplay() { startAutoplay(); }
+
+  carousel.addEventListener('scroll', function() {
+    var rect = carousel.getBoundingClientRect();
+    var closest = 0;
+    var closestDist = Infinity;
+    for (var i = 0; i < slides.length; i++) {
+      var slideRect = slides[i].getBoundingClientRect();
+      var dist = Math.abs(slideRect.left - rect.left);
+      if (dist < closestDist) { closestDist = dist; closest = i; }
+    }
+    if (closest !== current) { current = closest; updateDots(); }
+  });
+
+  carousel.addEventListener('mouseenter', stopAutoplay);
+  carousel.addEventListener('mouseleave', startAutoplay);
+
+  createDots();
+  startAutoplay();
+})();
+</script>
+
 </body>
 </html>
