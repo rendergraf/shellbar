@@ -35,8 +35,13 @@
     <img src="logo.png" alt="ShellBar logo"
          class="w-24 h-24 mx-auto rounded-2xl shadow-xl shadow-blue-500/20 mb-6">
 
-    <h1 class="text-[56px] font-semibold tracking-tight text-white leading-tight">
-      ShellBar
+    <h1 class="relative text-[56px] md:text-7xl font-bold tracking-tight">
+      <span class="absolute inset-0 blur-2xl opacity-30 text-blue-400">ShellBar</span>
+      <span class="relative bg-gradient-to-b from-white via-white to-gray-400
+                   bg-clip-text text-transparent
+                   [text-shadow:0_1px_0_rgba(255,255,255,0.15),0_8px_30px_rgba(77,163,255,0.25)]">
+        ShellBar
+      </span>
     </h1>
 
     <p class="mt-5 text-lg text-gray-400 max-w-xl mx-auto leading-relaxed">
@@ -165,7 +170,7 @@
 
 <!-- INSTALL -->
 <section class="py-24 bg-white/[0.02]">
-  <div class="max-w-3xl mx-auto px-6">
+  <div class="max-w-4xl mx-auto px-6">
     <h2 class="text-3xl font-semibold text-center mb-12">Install</h2>
 
     <div class="space-y-6">
