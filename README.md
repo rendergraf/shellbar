@@ -12,6 +12,10 @@
   <img src="https://img.shields.io/badge/NOT_a_fork-independent-8257D0" alt="Not a fork">
 </p>
 
+<p align="center">
+  <img src="assets/logo.png" alt="ShellBar logo" width="180">
+</p>
+
 ## Screenshots
 
 <p align="center">
