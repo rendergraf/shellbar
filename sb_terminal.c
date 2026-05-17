@@ -64,6 +64,8 @@ struct _SbTerminal {
   SbTerminalTitleCb title_cb;
   void *title_cb_data;
 
+  char last_title[256];
+
   int sel_start_col, sel_start_row;
   int sel_end_col, sel_end_row;
   bool has_selection;
@@ -77,6 +79,7 @@ struct _SbTerminal {
   GtkWidget *context_menu;
 
   bool button_held;
+  bool mouse_tracking_click;
   int press_col, press_row;
 
   GtkEventController *motion_controller;
@@ -482,10 +485,74 @@ static void open_url(const char *url) {
 /* Mouse gesture callbacks                                              */
 /* ------------------------------------------------------------------ */
 
+/* Forward declaration — defined later in the PTY section */
+static void pty_write_raw(int fd, const char *buf, size_t len);
+
+/* Forward a mouse event to the PTY when the terminal has mouse tracking
+ * enabled.  Returns true if the event was forwarded. */
+static bool send_mouse_event_to_pty(SbTerminal *self,
+                                     GhosttyMouseButton button,
+                                     GhosttyMouseAction action,
+                                     double x, double y,
+                                     GdkModifierType state) {
+  bool mouse_tracking = false;
+  ghostty_terminal_get(self->terminal,
+    GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING, &mouse_tracking);
+  if (!mouse_tracking)
+    return false;
+
+  ghostty_mouse_encoder_setopt_from_terminal(self->mouse_encoder,
+                                             self->terminal);
+
+  GhosttyMouseEncoderSize size_ctx = {
+    .size = sizeof(GhosttyMouseEncoderSize),
+    .screen_width  = (uint32_t)self->last_alloc_w,
+    .screen_height = (uint32_t)self->last_alloc_h,
+    .cell_width    = (uint32_t)self->cell_width,
+    .cell_height   = (uint32_t)self->cell_height,
+    .padding_top   = (uint32_t)self->padding,
+    .padding_bottom= (uint32_t)self->padding,
+    .padding_right = (uint32_t)self->padding,
+    .padding_left  = (uint32_t)self->padding,
+  };
+  ghostty_mouse_encoder_setopt(self->mouse_encoder,
+    GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size_ctx);
+
+  ghostty_mouse_event_set_action(self->mouse_event, action);
+  ghostty_mouse_event_set_button(self->mouse_event, button);
+  ghostty_mouse_event_set_position(self->mouse_event,
+    (GhosttyMousePosition){ .x = (float)x, .y = (float)y });
+
+  GhosttyMods mods = 0;
+  if (state & GDK_SHIFT_MASK)   mods |= GHOSTTY_MODS_SHIFT;
+  if (state & GDK_CONTROL_MASK) mods |= GHOSTTY_MODS_CTRL;
+  if (state & GDK_ALT_MASK)     mods |= GHOSTTY_MODS_ALT;
+  if (state & GDK_SUPER_MASK)   mods |= GHOSTTY_MODS_SUPER;
+  ghostty_mouse_event_set_mods(self->mouse_event, mods);
+
+  char buf[128];
+  size_t written = 0;
+  ghostty_mouse_encoder_encode(self->mouse_encoder, self->mouse_event,
+                               buf, sizeof(buf), &written);
+  if (written > 0)
+    pty_write_raw(self->pty_fd, buf, written);
+  return true;
+}
+
 static void right_click_pressed(GtkGestureClick *gesture, int n_press,
                                 double x, double y, gpointer user_data) {
   SbTerminal *self = user_data;
   (void)n_press;
+
+  GdkModifierType state =
+    gtk_event_controller_get_current_event_state(
+      GTK_EVENT_CONTROLLER(gesture));
+  if (send_mouse_event_to_pty(self, GHOSTTY_MOUSE_BUTTON_RIGHT,
+                               GHOSTTY_MOUSE_ACTION_PRESS, x, y, state)) {
+    gtk_gesture_set_state(GTK_GESTURE(gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+    return;
+  }
+
   if (!self->context_menu)
     self->context_menu = create_context_menu(self);
   GdkRectangle rect = { (int)x, (int)y, 1, 1 };
@@ -493,14 +560,21 @@ static void right_click_pressed(GtkGestureClick *gesture, int n_press,
   gtk_popover_popup(GTK_POPOVER(self->context_menu));
 }
 
-/* Middle-click pastes from clipboard. */
+/* Middle-click pastes from clipboard unless mouse tracking is active. */
 static void middle_click_pressed(GtkGestureClick *gesture, int n_press,
                                  double x, double y, gpointer user_data) {
-  (void)gesture;
   (void)n_press;
-  (void)x;
-  (void)y;
   SbTerminal *self = user_data;
+
+  GdkModifierType state =
+    gtk_event_controller_get_current_event_state(
+      GTK_EVENT_CONTROLLER(gesture));
+  if (send_mouse_event_to_pty(self, GHOSTTY_MOUSE_BUTTON_MIDDLE,
+                               GHOSTTY_MOUSE_ACTION_PRESS, x, y, state)) {
+    gtk_gesture_set_state(GTK_GESTURE(gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+    return;
+  }
+
   paste_from_clipboard(self);
 }
 
@@ -564,6 +638,17 @@ static void left_click_pressed(GtkGestureClick *gesture, int n_press,
   GdkModifierType state =
     gtk_event_controller_get_current_event_state(
       GTK_EVENT_CONTROLLER(gesture));
+
+  /* When mouse tracking is enabled in the terminal (e.g. by btop, htop,
+   * nvim, lazygit), forward mouse events to the PTY so the application
+   * can handle them interactively. */
+  if (send_mouse_event_to_pty(self, GHOSTTY_MOUSE_BUTTON_LEFT,
+                               GHOSTTY_MOUSE_ACTION_PRESS, x, y, state)) {
+    self->mouse_tracking_click = true;
+    gtk_gesture_set_state(GTK_GESTURE(gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+    return;
+  }
+  self->mouse_tracking_click = false;
 
   /* Triple-click → select entire line */
   if (n_press >= 3) {
@@ -632,13 +717,20 @@ static void left_click_pressed(GtkGestureClick *gesture, int n_press,
 
 static void left_click_released(GtkGestureClick *gesture, int n_press,
                                  double x, double y, gpointer user_data) {
-  (void)gesture;
   (void)n_press;
-  (void)x;
-  (void)y;
   SbTerminal *self = user_data;
 
   self->button_held = false;
+
+  if (self->mouse_tracking_click) {
+    self->mouse_tracking_click = false;
+    GdkModifierType state =
+      gtk_event_controller_get_current_event_state(
+        GTK_EVENT_CONTROLLER(gesture));
+    send_mouse_event_to_pty(self, GHOSTTY_MOUSE_BUTTON_LEFT,
+                             GHOSTTY_MOUSE_ACTION_RELEASE, x, y, state);
+    return;
+  }
 
   if (!self->selecting) return;
   self->selecting = false;
@@ -694,6 +786,13 @@ static void on_motion(GtkEventControllerMotion *controller,
 
   int col = (int)((x - self->padding) / self->cell_width);
   int row = (int)((y - self->padding) / self->cell_height);
+
+  /* Mouse-tracking-mode motion: forward drag to PTY */
+  if (self->button_held && self->mouse_tracking_click) {
+    send_mouse_event_to_pty(self, GHOSTTY_MOUSE_BUTTON_LEFT,
+                             GHOSTTY_MOUSE_ACTION_MOTION, x, y, 0);
+    return;
+  }
 
   /* Drag selection (button held + selecting mode) */
   if (self->button_held && self->selecting) {
@@ -890,18 +989,114 @@ static void effect_write_pty(GhosttyTerminal terminal, void *userdata,
   pty_write_raw(pty_fd, (const char *)data, len);
 }
 
+static bool get_cwd_basename(pid_t pid, char *out, size_t out_size) {
+  char link_path[64];
+  snprintf(link_path, sizeof(link_path), "/proc/%d/cwd", (int)pid);
+  char buf[4096];
+  ssize_t n = readlink(link_path, buf, sizeof(buf) - 1);
+  if (n <= 0) return false;
+  buf[n] = '\0';
+
+  const char *name = buf;
+  for (ssize_t i = 0; i < n; i++) {
+    if (buf[i] == '/') name = buf + i + 1;
+  }
+  if (*name == '\0') name = buf;
+
+  size_t name_len = strlen(name);
+  if (name_len == 0) return false;
+
+  if (name_len <= 16) {
+    size_t cp = name_len < out_size - 1 ? name_len : out_size - 1;
+    memcpy(out, name, cp);
+    out[cp] = '\0';
+  } else {
+    size_t keep = 13;
+    if (out_size < 4) keep = out_size - 4;
+    if (out_size > 3) memcpy(out, "...", 3);
+    size_t skip = name_len - keep;
+    size_t cp = keep < out_size - 3 ? keep : out_size - 3;
+    memcpy(out + 3, name + skip, cp);
+    out[3 + cp] = '\0';
+  }
+  return true;
+}
+
+static void format_tab_title_from_pwd(const GhosttyString *pwd,
+                                       char *out, size_t out_size) {
+  const char *uri = (const char *)pwd->ptr;
+  size_t uri_len = pwd->len;
+
+  const char *path_start = NULL;
+  if (uri_len >= 7 && memcmp(uri, "file://", 7) == 0) {
+    const char *host_end = memchr(uri + 7, '/', uri_len - 7);
+    if (host_end)
+      path_start = host_end;
+    else
+      path_start = uri + 7;
+  } else {
+    path_start = uri;
+  }
+
+  const char *name = path_start;
+  size_t path_len = uri_len - (size_t)(path_start - uri);
+  for (size_t i = 0; i < path_len; i++) {
+    if (path_start[i] == '/')
+      name = path_start + i + 1;
+  }
+  if (*name == '\0')
+    name = path_start;
+
+  size_t name_len = uri_len - (size_t)(name - uri);
+  if (name_len == 0) {
+    if (out_size > 0) out[0] = '\0';
+    return;
+  }
+
+  if (name_len <= 16) {
+    size_t cp = name_len < out_size - 1 ? name_len : out_size - 1;
+    memcpy(out, name, cp);
+    out[cp] = '\0';
+  } else {
+    size_t keep = 13;
+    if (out_size < 4) keep = out_size - 4;
+    if (out_size > 3) memcpy(out, "...", 3);
+    size_t skip = name_len - keep;
+    size_t cp = keep < out_size - 3 ? keep : out_size - 3;
+    memcpy(out + 3, name + skip, cp);
+    out[3 + cp] = '\0';
+  }
+}
+
 static void effect_title_changed(GhosttyTerminal terminal, void *userdata) {
   SbTerminal *self = userdata;
-  GhosttyString title = {0};
-  if (ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_TITLE, &title)
-      != GHOSTTY_SUCCESS || title.len == 0)
+
+  GhosttyString pwd = {0};
+  if (ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_PWD, &pwd)
+      == GHOSTTY_SUCCESS && pwd.len > 0) {
+    char title[256] = {0};
+    format_tab_title_from_pwd(&pwd, title, sizeof(title));
+    if (title[0] && strcmp(title, self->last_title) != 0) {
+      strncpy(self->last_title, title, sizeof(self->last_title) - 1);
+      if (self->title_cb)
+        self->title_cb(self, title, self->title_cb_data);
+    }
+    return;
+  }
+
+  GhosttyString osc_title = {0};
+  if (ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_TITLE, &osc_title)
+      != GHOSTTY_SUCCESS || osc_title.len == 0)
     return;
   char buf[256];
-  size_t len = title.len < sizeof(buf) - 1 ? title.len : sizeof(buf) - 1;
-  memcpy(buf, title.ptr, len);
+  size_t len = osc_title.len < sizeof(buf) - 1 ? osc_title.len : sizeof(buf) - 1;
+  memcpy(buf, osc_title.ptr, len);
   buf[len] = '\0';
-  if (self->title_cb)
-    self->title_cb(self, buf, self->title_cb_data);
+  if (strcmp(buf, self->last_title) != 0) {
+    strncpy(self->last_title, buf, sizeof(self->last_title) - 1);
+    if (self->title_cb)
+      self->title_cb(self, buf, self->title_cb_data);
+  }
 }
 
 static bool effect_size(GhosttyTerminal terminal, void *userdata,
@@ -977,6 +1172,31 @@ static gboolean on_pty_readable(GIOChannel *channel,
 
   if (dirty) {
     ghostty_render_state_update(self->render_state, self->terminal);
+
+    GhosttyString pwd = {0};
+    bool title_updated = false;
+    if (ghostty_terminal_get(self->terminal,
+          GHOSTTY_TERMINAL_DATA_PWD, &pwd) == GHOSTTY_SUCCESS
+        && pwd.len > 0) {
+      char title[256] = {0};
+      format_tab_title_from_pwd(&pwd, title, sizeof(title));
+      if (title[0] && strcmp(title, self->last_title) != 0) {
+        strncpy(self->last_title, title, sizeof(self->last_title) - 1);
+        if (self->title_cb)
+          self->title_cb(self, title, self->title_cb_data);
+        title_updated = true;
+      }
+    }
+
+    if (!title_updated && self->child_pid > 0) {
+      char title[256] = {0};
+      if (get_cwd_basename(self->child_pid, title, sizeof(title))
+          && title[0] && strcmp(title, self->last_title) != 0) {
+        strncpy(self->last_title, title, sizeof(self->last_title) - 1);
+        if (self->title_cb)
+          self->title_cb(self, title, self->title_cb_data);
+      }
+    }
 
     if (self->follow_bottom) {
       self->follow_bottom = false;

@@ -5,9 +5,31 @@
 
 ## Vision
 
-ShellBar is a terminal emulator based on **libghostty-vt** (Ghostty's core)
-that looks and feels like Ghostty, but adds a configurable toolbar with
-buttons that execute commands on the active terminal.
+ShellBar is a tool designed to streamline how developers interact with
+their projects, especially in complex environments such as monorepos.
+
+In modern development workflows, terminal commands are often long,
+repetitive, and hard to remember. They are typically scattered across
+package.json files or internal documentation, forcing developers to spend
+valuable time searching for how to run common tasks.
+
+ShellBar solves this by centralizing your most frequently used commands
+into a dedicated action bar within the shell, turning them into instant,
+one-click shortcuts.
+
+This becomes especially powerful in monorepos or multi-environment
+projects (local, staging, production), as well as setups that vary by
+platform (web, desktop, mobile). Instead of repeatedly consulting
+documentation or navigating through scripts, developers can immediately
+trigger the right workflow.
+
+The result is a more focused, efficient, and productive environment where
+operational friction is reduced, allowing developers to concentrate on
+what truly matters: building software.
+
+Technically, ShellBar is a terminal emulator based on **libghostty-vt**
+(Ghostty's core) that looks and feels like Ghostty, but adds a configurable
+toolbar with buttons that execute commands on the active terminal.
 
 ## Relationship with Ghostty / Ghostling
 

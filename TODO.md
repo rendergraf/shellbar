@@ -1,5 +1,7 @@
 # ShellBar — TODO
 
+> ShellBar is a tool designed to streamline how developers interact with their projects, especially in complex environments such as monorepos. It centralizes your most frequently used commands into a dedicated action bar within the shell, turning them into instant, one-click shortcuts.
+
 ## Phase 1: Base Terminal
 
 - [x] **1.1** Create `CMakeLists.txt` with libghostty-vt fetch and GTK4 dependencies

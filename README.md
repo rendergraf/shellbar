@@ -1,7 +1,7 @@
-# ShellBar v1.4.0
+# ShellBar v1.5.0
 
-> **Ghostty-like terminal emulator with a workflow toolbar — for Linux.**
-> ShellBar is **NOT a fork**. It uses `libghostty-vt` as a library via CMake FetchContent, maintaining complete independence from upstream Ghostty.
+> ShellBar is a tool designed to streamline how developers interact with their projects, especially in complex environments such as monorepos.
+> ShellBar is **NOT a fork** of Ghostty. It uses `libghostty-vt` as a library via CMake FetchContent, maintaining complete independence from upstream Ghostty.
 
 <p align="center">
   <a href="https://github.com/rendergraf/shellbar"><img src="https://img.shields.io/github/stars/rendergraf/shellbar" alt="GitHub Stars"></a>
@@ -49,15 +49,27 @@
 
 ## Description
 
-ShellBar is a terminal emulator built on **Ghostty**'s VT engine
-(`libghostty-vt`), with a configurable toolbar that lets you launch
-commands with a single click. It's designed for developers who want a
-fast, Ghostty-like terminal with workflow buttons at their fingertips.
+ShellBar is a tool designed to streamline how developers interact with
+their projects, especially in complex environments such as monorepos.
 
-**ShellBar is NOT a fork of Ghostty.** It uses `libghostty-vt` as a
-library via CMake `FetchContent` — no patches, no upstream modifications,
-no merge conflicts. This keeps the project independent, lightweight, and
-easy to maintain while benefiting from Ghostty's industry-leading VT engine.
+In modern development workflows, terminal commands are often long,
+repetitive, and hard to remember. They are typically scattered across
+package.json files or internal documentation, forcing developers to spend
+valuable time searching for how to run common tasks.
+
+ShellBar solves this by centralizing your most frequently used commands
+into a dedicated action bar within the shell, turning them into instant,
+one-click shortcuts.
+
+This becomes especially powerful in monorepos or multi-environment
+projects (local, staging, production), as well as setups that vary by
+platform (web, desktop, mobile). Instead of repeatedly consulting
+documentation or navigating through scripts, developers can immediately
+trigger the right workflow.
+
+The result is a more focused, efficient, and productive environment where
+operational friction is reduced, allowing developers to concentrate on
+what truly matters: building software.
 
 Visually it's a Ghostty-like terminal for Linux (GTK4 + libadwaita, dark
 theme, inline tabs). The difference is the button bar that you configure
@@ -96,8 +108,8 @@ to run any command on the active terminal.
 ### Debian/Ubuntu (pre-built .deb)
 
 ```sh
-curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.4.0_amd64.deb
-sudo dpkg -i shellbar_1.4.0_amd64.deb
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.5.0_amd64.deb
+sudo dpkg -i shellbar_1.5.0_amd64.deb
 sudo apt-get install -f
 ```
 
