@@ -19,12 +19,9 @@
 ## Screenshots
 
 <p align="center">
-  <img src="assets/screenshot-1.png" alt="ShellBar terminal with toolbar" width="48%">
-  <img src="assets/screenshot-2.png" alt="ShellBar terminal with tabs" width="48%">
-</p>
-<p align="center">
-  <img src="assets/screenshot-3.png" alt="ShellBar terminal with config" width="48%">
-  <img src="assets/screenshot-4.png" alt="ShellBar utility bar and TUI tools" width="48%">
+  <img src="assets/screenshot-1.png" alt="ShellBar terminal with toolbar" width="32%">
+  <img src="assets/screenshot-2.png" alt="ShellBar terminal with tabs" width="32%">
+  <img src="assets/screenshot-3.png" alt="ShellBar terminal with config" width="32%">
 </p>
 
 ## Tech Stack
