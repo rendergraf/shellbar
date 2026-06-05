@@ -113,7 +113,15 @@ sudo dpkg -i shellbar_1.5.0_amd64.deb
 sudo apt-get install -f
 ```
 
+### Arch Linux (pre-built package)
+
+```sh
+sudo pacman -U shellbar-1.5.0-1-x86_64.pkg.tar.zst
+```
+
 ### Build from source
+
+Zig (>= 0.15.2) is downloaded automatically during the build process and stored in `build/`.
 
 ```sh
 git clone https://github.com/rendergraf/shellbar
@@ -125,11 +133,25 @@ cmake --build build
 
 Release build: `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release`
 
+### Create release packages
+
+The `build-release.sh` script builds both Debian and Arch Linux packages:
+
+```sh
+./build-release.sh 1.5.0          # Both .deb and .pkg.tar.zst
+./build-release.sh 1.5.0 --deb-only    # Debian only
+./build-release.sh 1.5.0 --arch-only   # Arch only
+```
+
+Packages are generated in `build/`:
+- **Debian/Ubuntu**: `shellbar_1.5.0_amd64.deb` — install with `sudo dpkg -i`
+- **Arch Linux**: `shellbar-1.5.0-1-x86_64.pkg.tar.zst` — install with `sudo pacman -U`
+
 ## Requirements
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| Zig | >= 0.15.2 | Build libghostty-vt |
+| Zig | >= 0.15.2 | Build libghostty-vt (auto-downloaded) |
 | C compiler | C11 (gcc/clang) | Build ShellBar |
 | CMake | >= 3.19 | Build system |
 | Ninja | — | Build backend |
@@ -139,15 +161,21 @@ Release build: `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release`
 | Cairo | — | Terminal rendering |
 | git | — | Fetch libghostty-vt |
 
-### Install dependencies (Debian/Ubuntu 24.04)
+### Install dependencies
+
+**Debian/Ubuntu 24.04:**
 
 ```sh
 sudo apt install build-essential cmake ninja-build \
   libgtk-4-dev libadwaita-1-dev libpango1.0-dev \
-  libcairo2-dev git
+  libcairo2-dev git wget
 ```
 
-Zig: download from https://ziglang.org/download/ (>= 0.15.2).
+**Arch Linux / EndeavourOS:**
+
+```sh
+sudo pacman -S base-devel cmake ninja gtk4 libadwaita pango cairo git wget
+```
 
 ## Configuration
 
