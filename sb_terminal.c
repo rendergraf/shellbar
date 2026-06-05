@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.3 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.6.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -87,6 +87,8 @@ struct _SbTerminal {
   char *hover_url;
   int hover_url_start_col, hover_url_end_col, hover_url_row;
   bool has_hover_url;
+
+  int scale_factor;
 };
 
 /* ------------------------------------------------------------------ */
@@ -1129,7 +1131,7 @@ static bool effect_device_attributes(GhosttyTerminal terminal, void *userdata,
 static GhosttyString effect_xtversion(GhosttyTerminal terminal, void *userdata) {
   (void)terminal;
   (void)userdata;
-  return (GhosttyString){ .ptr = (const uint8_t *)"shellbar 1.3", .len = 13 };
+  return (GhosttyString){ .ptr = (const uint8_t *)"shellbar 1.6.0", .len = 15 };
 }
 
 static bool effect_color_scheme(GhosttyTerminal terminal, void *userdata,
@@ -1491,6 +1493,35 @@ static gboolean on_scroll(GtkEventControllerScroll *controller,
 }
 
 /* ------------------------------------------------------------------ */
+/* HiDPI scale factor handling                                          */
+/* ------------------------------------------------------------------ */
+
+static void on_scale_factor_changed(GObject *obj, GParamSpec *pspec,
+                                     gpointer user_data) {
+  (void)pspec;
+  SbTerminal *self = user_data;
+  GtkWidget *widget = GTK_WIDGET(obj);
+  int new_sf = gtk_widget_get_scale_factor(widget);
+  if (new_sf == self->scale_factor)
+    return;
+
+  self->scale_factor = new_sf;
+
+  PangoLayout *tmp = gtk_widget_create_pango_layout(self->widget, "M");
+  pango_layout_set_font_description(tmp, self->font_desc);
+  pango_layout_get_pixel_size(tmp, &self->cell_width, &self->cell_height);
+  g_object_unref(tmp);
+
+  gtk_widget_set_size_request(self->widget,
+      80 * self->cell_width  + self->padding * 2,
+      24 * self->cell_height + self->padding * 2);
+
+  self->last_alloc_w = 0;
+  self->last_alloc_h = 0;
+  gtk_widget_queue_resize(self->widget);
+}
+
+/* ------------------------------------------------------------------ */
 /* Resize handler                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -1517,13 +1548,17 @@ static void recalc_geometry(SbTerminal *self, int alloc_w, int alloc_h) {
                             (uint32_t)self->cell_width,
                             (uint32_t)self->cell_height);
 
+    int sf = self->scale_factor > 0 ? self->scale_factor : 1;
     struct winsize ws = {
       .ws_row = self->rows,
       .ws_col = self->cols,
-      .ws_xpixel = (unsigned short)(self->cols * self->cell_width),
-      .ws_ypixel = (unsigned short)(self->rows * self->cell_height),
+      .ws_xpixel = (unsigned short)(self->cols * self->cell_width * sf),
+      .ws_ypixel = (unsigned short)(self->rows * self->cell_height * sf),
     };
     ioctl(self->pty_fd, TIOCSWINSZ, &ws);
+
+    ghostty_render_state_update(self->render_state, self->terminal);
+    gtk_widget_queue_draw(self->widget);
   }
 }
 
@@ -1784,6 +1819,9 @@ SbTerminal *sb_terminal_new(void) {
   gtk_widget_set_has_tooltip(self->widget, TRUE);
   g_signal_connect(self->widget, "query-tooltip",
                    G_CALLBACK(on_query_tooltip), self);
+
+  self->scale_factor = gtk_widget_get_scale_factor(self->widget);
+
   PangoLayout *tmp = gtk_widget_create_pango_layout(self->widget, "M");
   pango_layout_set_font_description(tmp, self->font_desc);
   pango_layout_get_pixel_size(tmp, &self->cell_width, &self->cell_height);
@@ -1858,6 +1896,10 @@ SbTerminal *sb_terminal_new(void) {
   /* Drawing area setup */
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(self->widget),
     render_terminal, self, NULL);
+
+  /* HiDPI: track scale factor changes (e.g. moving between monitors) */
+  g_signal_connect(self->widget, "notify::scale-factor",
+                   G_CALLBACK(on_scale_factor_changed), self);
 
   /* Keyboard controller on the drawing area itself */
   GtkEventController *k = gtk_event_controller_key_new();

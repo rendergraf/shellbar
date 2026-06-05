@@ -20,7 +20,7 @@
   - [x] Support Ctrl, Alt, Shift, Super
   - [x] Direct UTF-8 fallback for unmapped symbols (*, ñ, !, @, etc.)
 - [x] **1.6** Mouse input:
-  - [ ] Click, selection (pending)
+  - [x] Click, selection (drag, double-click word, triple-click line, Shift+extend)
   - [x] Scroll via ghostty_mouse_encoder_encode()
 - [x] **1.7** Scrollback:
   - [x] Mouse wheel → ghostty_terminal_scroll_viewport()
@@ -67,7 +67,7 @@
   - [x] TabBar as standalone bar (not nested in header — fixes zero-height issue)
 - [x] **4.4** Thin scrollbar on the right
 - [ ] **4.5** Animations: resize overlay, new tab transition
-- [ ] **4.6** HiDPI
+- [x] **4.6** HiDPI
 - [x] **4.7** JetBrains Mono font (via Pango, fallback Monospace)
 - [ ] **4.8** Ghostty-matching CSS:
   - [ ] Rounded borders
@@ -76,8 +76,8 @@
 ## Phase 5: Shortcuts & UX
 
 - [x] **5.1** Toolbar button shortcuts (Alt+1, Alt+2, ..., Alt+0)
-- [ ] **5.2** Configurable keybinds
-- [ ] **5.3** Drag & drop to reorder buttons
+- [x] **5.2** Configurable keybinds
+- [x] **5.3** Drag & drop to reorder buttons
 - [x] **5.4** Tooltip shows command on hover
 - [ ] **5.5** Visual feedback when executing command (brief highlight)
 

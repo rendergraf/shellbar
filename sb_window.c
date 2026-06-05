@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.3 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.6.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -373,9 +373,9 @@ static void act_about(GSimpleAction *action, GVariant *param,
   const char *authors[] = { "Xavier Araque <xavieraraque@gmail.com>", NULL };
   gtk_show_about_dialog(GTK_WINDOW(self),
     "program-name", "ShellBar",
-    "version", "1.3",
+    "version", "1.6.0",
     "comments",
-    "A command-bar terminal emulator built on libghostty-vt",
+    "A configurable command-bar terminal emulator for Linux, built on libghostty-vt",
     "website", "https://github.com/rendergraf/shellbar",
     "website-label", "github.com/rendergraf/shellbar",
     "copyright", "© 2026 Xavier Araque",

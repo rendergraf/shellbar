@@ -1,23 +1,27 @@
 #!/bin/bash
 # ShellBar release builder
-# Creates .deb (Debian/Ubuntu) and .pkg.tar.zst (Arch Linux) packages
+# Creates .deb (Debian/Ubuntu), .pkg.tar.zst (Arch Linux), and .rpm (Fedora) packages
 set -e
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION="${1:-1.5.0}"
+VERSION="${1:-1.6.0}"
 BUILD_DIR="$PROJECT_DIR/build"
 DEB_NAME="shellbar_${VERSION}_amd64.deb"
 DEB_PATH="$BUILD_DIR/$DEB_NAME"
 ARCH_NAME="shellbar-${VERSION}-1-x86_64.pkg.tar.zst"
+RPM_NAME="shellbar-${VERSION}-1.x86_64.rpm"
+RPM_PATH="$BUILD_DIR/x86_64/$RPM_NAME"
 
 # Parse arguments
 BUILD_DEB=true
 BUILD_ARCH=true
+BUILD_RPM=true
 
 for arg in "$@"; do
   case "$arg" in
-    --deb-only) BUILD_ARCH=false ;;
-    --arch-only) BUILD_DEB=false ;;
+    --deb-only) BUILD_ARCH=false; BUILD_RPM=false ;;
+    --arch-only) BUILD_DEB=false; BUILD_RPM=false ;;
+    --rpm-only) BUILD_DEB=false; BUILD_ARCH=false ;;
   esac
 done
 
@@ -193,24 +197,143 @@ EOF
   fi
 fi
 
+# --- .rpm package (Fedora/RHEL) ---
+if [ "$BUILD_RPM" = true ]; then
+  if ! command -v rpmbuild &>/dev/null; then
+    echo "=== Skipping .rpm package: rpmbuild not found ==="
+    BUILD_RPM=false
+  else
+    echo "=== Creating Fedora/RHEL .rpm package ==="
+
+    RPM_BUILD_DIR="$(mktemp -d)"
+    mkdir -p "$RPM_BUILD_DIR"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+
+    cat > "$RPM_BUILD_DIR/SPECS/shellbar.spec" << EOF
+Name:           shellbar
+Version:        ${VERSION}
+Release:        1%{?dist}
+Summary:        Terminal emulator with configurable command toolbar
+
+License:        MIT
+URL:            https://rendergraf.github.io/shellbar/
+Source0:        shellbar-${VERSION}.tar.gz
+
+Requires:       gtk4 >= 4.12
+Requires:       libadwaita >= 1.5
+Requires:       pango
+Requires:       cairo
+
+%description
+ShellBar is a terminal emulator built on Ghostty's VT engine with a
+configurable toolbar for launching commands with a single click.
+
+Features:
+ - Configurable toolbar buttons from ~/.config/shellbar/config
+ - Mouse text selection with copy/paste (Ctrl+Shift+C/V)
+ - Multiple tabs with independent shells
+ - Configurable keybinds
+ - Dark theme matching Ghostty's appearance
+ - Utility bar with auto-detected TUI tools
+ - URL detection with Ctrl+Click to open
+
+%prep
+%setup -q -n shellbar
+
+%build
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build -- -j\$(nproc)
+
+%install
+rm -rf %{buildroot}
+install -Dm755 build/shellbar %{buildroot}%{_bindir}/shellbar
+
+for size in 16 24 32 48 64 128 256; do
+  install -Dm644 assets/icon-\${size}.png \\
+    %{buildroot}%{_datadir}/icons/hicolor/\${size}x\${size}/apps/shellbar.png
+done
+install -Dm644 assets/icon.svg \\
+  %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/shellbar.svg
+
+install -Dm644 /dev/stdin %{buildroot}%{_datadir}/applications/shellbar.desktop << 'DESKTOP'
+[Desktop Entry]
+Name=ShellBar
+Comment=Terminal emulator with configurable command toolbar
+Exec=shellbar
+Icon=shellbar
+Terminal=false
+Type=Application
+Categories=System;TerminalEmulator;
+Keywords=terminal;shell;console;command;toolbar;
+DESKTOP
+
+%post
+/bin/touch --no-create %{_datadir}/icons/hicolor &>/dev/null || :
+if [ -x /usr/bin/gtk4-update-icon-cache ]; then
+  gtk4-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
+elif [ -x /usr/bin/gtk-update-icon-cache ]; then
+  gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
+fi
+
+%postun
+if [ \$1 -eq 0 ]; then
+  /bin/touch --no-create %{_datadir}/icons/hicolor &>/dev/null || :
+  if [ -x /usr/bin/gtk4-update-icon-cache ]; then
+    gtk4-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
+  elif [ -x /usr/bin/gtk-update-icon-cache ]; then
+    gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
+  fi
+fi
+
+%files
+%license LICENSE
+%doc README.md
+%{_bindir}/shellbar
+%{_datadir}/applications/shellbar.desktop
+%{_datadir}/icons/hicolor/*/apps/shellbar.*
+
+%changelog
+* $(date '+%a %b %d %Y') Xavier Araque <xavieraraque@gmail.com> - ${VERSION}-1
+- Release v${VERSION}
+EOF
+
+    # Create source tarball
+    TARBALL_DIR="$(mktemp -d)/shellbar"
+    mkdir -p "$TARBALL_DIR"
+    rsync -a --exclude='.git' --exclude='build' "$PROJECT_DIR/" "$TARBALL_DIR/"
+    tar czf "$RPM_BUILD_DIR/SOURCES/shellbar-${VERSION}.tar.gz" -C "$(dirname "$TARBALL_DIR")" shellbar
+    rm -rf "$(dirname "$TARBALL_DIR")"
+
+    rpmbuild --define "_topdir $RPM_BUILD_DIR" -bb "$RPM_BUILD_DIR/SPECS/shellbar.spec" 2>/dev/null
+
+    if [ -f "$RPM_BUILD_DIR/x86_64/$RPM_NAME" ]; then
+      mkdir -p "$BUILD_DIR"
+      cp "$RPM_BUILD_DIR/x86_64/$RPM_NAME" "$BUILD_DIR/$RPM_NAME"
+      echo "=== RPM package built: $BUILD_DIR/$RPM_NAME ==="
+    else
+      echo "=== RPM build failed ==="
+      BUILD_RPM=false
+    fi
+
+    rm -rf "$RPM_BUILD_DIR"
+  fi
+fi
+
 echo ""
 echo "=== Build complete ==="
 [ "$BUILD_DEB" = true ] && echo "  Debian/Ubuntu: $DEB_PATH"
 [ "$BUILD_ARCH" = true ] && echo "  Arch Linux:    $BUILD_DIR/$ARCH_NAME"
+[ "$BUILD_RPM" = true ] && echo "  Fedora/RHEL:   $BUILD_DIR/$RPM_NAME"
 echo ""
 echo "To publish on GitHub Releases:"
-if [ "$BUILD_DEB" = true ] && [ "$BUILD_ARCH" = true ]; then
+RELEASE_FILES=""
+[ "$BUILD_DEB" = true ] && RELEASE_FILES="$RELEASE_FILES '$DEB_PATH'"
+[ "$BUILD_ARCH" = true ] && RELEASE_FILES="$RELEASE_FILES '$BUILD_DIR/$ARCH_NAME'"
+[ "$BUILD_RPM" = true ] && RELEASE_FILES="$RELEASE_FILES '$BUILD_DIR/$RPM_NAME'"
+if [ -n "$RELEASE_FILES" ]; then
   echo "  gh release create v${VERSION} \\"
-  echo "    '$DEB_PATH' \\"
-  echo "    '$BUILD_DIR/$ARCH_NAME' \\"
-  echo "    --title 'ShellBar v${VERSION}' \\"
-  echo "    --notes 'See https://rendergraf.github.io/shellbar/'"
-elif [ "$BUILD_DEB" = true ]; then
-  echo "  gh release create v${VERSION} '$DEB_PATH' \\"
-  echo "    --title 'ShellBar v${VERSION}' \\"
-  echo "    --notes 'See https://rendergraf.github.io/shellbar/'"
-elif [ "$BUILD_ARCH" = true ]; then
-  echo "  gh release create v${VERSION} '$BUILD_DIR/$ARCH_NAME' \\"
+  for f in $RELEASE_FILES; do
+    echo "    $f \\"
+  done
   echo "    --title 'ShellBar v${VERSION}' \\"
   echo "    --notes 'See https://rendergraf.github.io/shellbar/'"
 fi
@@ -221,6 +344,8 @@ echo ""
 echo "Install locally:"
 if command -v pacman &>/dev/null; then
   echo "  sudo pacman -U $BUILD_DIR/$ARCH_NAME"
+elif command -v rpm &>/dev/null; then
+  echo "  sudo rpm -i $BUILD_DIR/$RPM_NAME"
 elif command -v dpkg &>/dev/null; then
   echo "  sudo dpkg -i $DEB_PATH && sudo apt-get install -f"
 fi

@@ -1,4 +1,4 @@
-# ShellBar v1.5.0
+# ShellBar v1.6.0
 
 > ShellBar is a tool designed to streamline how developers interact with their projects, especially in complex environments such as monorepos.
 > ShellBar is **NOT a fork** of Ghostty. It uses `libghostty-vt` as a library via CMake FetchContent, maintaining complete independence from upstream Ghostty.
@@ -105,18 +105,32 @@ to run any command on the active terminal.
 
 ## Install
 
-### Debian/Ubuntu (pre-built .deb)
+### Fedora / RHEL (pre-built .rpm)
 
 ```sh
-curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.5.0_amd64.deb
-sudo dpkg -i shellbar_1.5.0_amd64.deb
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.6.0-1.x86_64.rpm
+sudo rpm -i shellbar-1.6.0-1.x86_64.rpm
+```
+
+Or with dnf:
+
+```sh
+sudo dnf install https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.6.0-1.x86_64.rpm
+```
+
+### Debian / Ubuntu (pre-built .deb)
+
+```sh
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.6.0_amd64.deb
+sudo dpkg -i shellbar_1.6.0_amd64.deb
 sudo apt-get install -f
 ```
 
 ### Arch Linux (pre-built package)
 
 ```sh
-sudo pacman -U shellbar-1.5.0-1-x86_64.pkg.tar.zst
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.6.0-1-x86_64.pkg.tar.zst
+sudo pacman -U shellbar-1.6.0-1-x86_64.pkg.tar.zst
 ```
 
 ### Build from source
@@ -135,17 +149,19 @@ Release build: `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release`
 
 ### Create release packages
 
-The `build-release.sh` script builds both Debian and Arch Linux packages:
+The `build-release.sh` script builds Debian, Arch Linux, and Fedora packages:
 
 ```sh
-./build-release.sh 1.5.0          # Both .deb and .pkg.tar.zst
-./build-release.sh 1.5.0 --deb-only    # Debian only
-./build-release.sh 1.5.0 --arch-only   # Arch only
+./build-release.sh 1.6.0               # All packages (.deb + .pkg.tar.zst + .rpm)
+./build-release.sh 1.6.0 --deb-only    # Debian only
+./build-release.sh 1.6.0 --arch-only   # Arch only
+./build-release.sh 1.6.0 --rpm-only    # Fedora only
 ```
 
 Packages are generated in `build/`:
-- **Debian/Ubuntu**: `shellbar_1.5.0_amd64.deb` — install with `sudo dpkg -i`
-- **Arch Linux**: `shellbar-1.5.0-1-x86_64.pkg.tar.zst` — install with `sudo pacman -U`
+- **Debian/Ubuntu**: `shellbar_1.6.0_amd64.deb` — install with `sudo dpkg -i`
+- **Arch Linux**: `shellbar-1.6.0-1-x86_64.pkg.tar.zst` — install with `sudo pacman -U`
+- **Fedora/RHEL**: `shellbar-1.6.0-1.x86_64.rpm` — install with `sudo rpm -i`
 
 ## Requirements
 
@@ -169,6 +185,13 @@ Packages are generated in `build/`:
 sudo apt install build-essential cmake ninja-build \
   libgtk-4-dev libadwaita-1-dev libpango1.0-dev \
   libcairo2-dev git wget
+```
+
+**Fedora 41+:**
+
+```sh
+sudo dnf install gcc cmake ninja-build gtk4-devel libadwaita-devel \
+  pango-devel cairo-devel git wget
 ```
 
 **Arch Linux / EndeavourOS:**
