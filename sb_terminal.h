@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.7.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -10,9 +10,13 @@
 #include "sb_config.h"
 #include "sb_theme.h"
 
+typedef struct _SbIndexer SbIndexer;
+
 typedef struct _SbTerminal SbTerminal;
 
 typedef void (*SbTerminalTitleCb)(SbTerminal *terminal, const char *title, void *userdata);
+typedef void (*SbTerminalActivityCb)(SbTerminal *terminal, void *userdata);
+typedef void (*SbTerminalEnterCb)(SbTerminal *terminal, void *userdata);
 
 SbTerminal *sb_terminal_new(void);
 void sb_terminal_free(SbTerminal *terminal);
@@ -34,5 +38,11 @@ void sb_terminal_search_toggle(SbTerminal *self);
 void sb_terminal_search_hide(SbTerminal *self);
 void sb_terminal_search_dismiss(SbTerminal *self);
 bool sb_terminal_search_is_visible(SbTerminal *self);
+
+void sb_terminal_set_indexer(SbTerminal *self, SbIndexer *indexer);
+void sb_terminal_set_activity_callback(SbTerminal *self, SbTerminalActivityCb cb,
+                                       void *userdata);
+void sb_terminal_set_enter_callback(SbTerminal *self, SbTerminalEnterCb cb,
+                                    void *userdata);
 
 #endif

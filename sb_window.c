@@ -1,11 +1,12 @@
 /*
- * ShellBar v1.7.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
 #include "sb_window.h"
 #include "sb_toolbar.h"
 #include "sb_config.h"
+#include "sb_indexer.h"
 #include "sb_preferences_dialog.h"
 #include "sb_theme.h"
 
@@ -24,6 +25,9 @@ typedef struct {
   GtkWidget *tab_button;
   GtkWidget *tab_close_btn;
   GtkWidget *tab_row;
+  SbWindow *window;
+  int active_button;
+  guint idle_timer;
 } SbTabEntry;
 
 /* ------------------------------------------------------------------ */
@@ -52,6 +56,19 @@ struct _SbWindow {
   int shortcut_count;
   SbConfigKeybind *config_keybinds;
   int config_keybind_count;
+
+  SbIndexer *indexer;
+  GtkWidget *cmd_palette;
+  GtkWidget *cmd_entry;
+  GtkWidget *cmd_list_view;
+  GListStore *cmd_store;
+  GtkCustomSorter *cmd_sorter;
+  char *cmd_search_text;
+  guint cmd_index_callback;
+
+  GHashTable *cmd_usage_counts;
+  gboolean cmd_auto_execute;
+  GHashTable *cmd_hist_cache;
 };
 
 G_DEFINE_TYPE(SbWindow, sb_window, ADW_TYPE_APPLICATION_WINDOW)
@@ -82,6 +99,18 @@ static SbTerminal *active_terminal(SbWindow *self) {
   int idx = tab_index_of(self, page);
   return (idx >= 0) ? self->tabs[idx].terminal : NULL;
 }
+
+static void cmd_palette_show(SbWindow *self);
+static void cmd_palette_hide(SbWindow *self);
+static void cmd_palette_populate_filtered(SbWindow *self, const char *prefix);
+static void cmd_usage_save(SbWindow *self);
+static void cmd_usage_increment(SbWindow *self, const char *command);
+static void cmd_usage_load(SbWindow *self);
+static int  cmd_sort_func(gconstpointer a, gconstpointer b,
+                           gpointer user_data);
+static void on_terminal_activity(SbTerminal *terminal, void *userdata);
+static void on_terminal_enter(SbTerminal *terminal, void *userdata);
+static void on_toolbar_command(int index, void *userdata);
 
 /* ---- Title callback from terminal → tab label ---- */
 
@@ -148,6 +177,17 @@ static void on_tab_switch(AdwTabView *view, GParamSpec *pspec,
   SbTerminal *term = active_terminal(self);
   if (term) sb_toolbar_set_active_terminal(self->toolbar, term);
 
+  for (int i = 0; i < self->shortcut_count; i++)
+    sb_toolbar_set_button_highlight(self->toolbar, i, FALSE);
+
+  for (int i = 0; i < self->tab_count; i++) {
+    if (self->tabs[i].terminal == term && self->tabs[i].active_button >= 0) {
+      sb_toolbar_set_button_highlight(self->toolbar,
+          self->tabs[i].active_button, TRUE);
+      break;
+    }
+  }
+
   /* Defer focus grab to idle so AdwTabView can finish its page transition */
   g_idle_add(focus_first_tab, self);
 }
@@ -163,6 +203,8 @@ static gboolean on_close_page(AdwTabView *view, AdwTabPage *page,
   if (idx < 0) return GDK_EVENT_PROPAGATE;
 
   gtk_box_remove(GTK_BOX(self->tab_bar_box), self->tabs[idx].tab_row);
+  if (self->tabs[idx].idle_timer > 0)
+    g_source_remove(self->tabs[idx].idle_timer);
   sb_terminal_free(self->tabs[idx].terminal);
   if (idx < self->tab_count - 1)
     memmove(&self->tabs[idx], &self->tabs[idx + 1],
@@ -194,6 +236,8 @@ static void add_tab(SbWindow *self) {
   if (self->config_keybind_count > 0)
     sb_terminal_set_keybinds(term, self->config_keybinds,
                              self->config_keybind_count);
+  if (self->indexer)
+    sb_terminal_set_indexer(term, self->indexer);
 
   GtkWidget *child = sb_terminal_get_widget(term);
 
@@ -240,6 +284,12 @@ static void add_tab(SbWindow *self) {
   ent->tab_button = tab_btn;
   ent->tab_close_btn = close_btn;
   ent->tab_row = tab_row;
+  ent->window = self;
+  ent->active_button = -1;
+  ent->idle_timer = 0;
+
+  sb_terminal_set_activity_callback(term, on_terminal_activity, self);
+  sb_terminal_set_enter_callback(term, on_terminal_enter, self);
 
   adw_tab_view_set_selected_page(self->tab_view, page);
   sb_toolbar_set_active_terminal(self->toolbar, term);
@@ -291,6 +341,12 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller,
   if (keyval == GDK_KEY_f && has_ctrl && !has_shift && !has_alt) {
     SbTerminal *term = active_terminal(self);
     if (term) sb_terminal_search_toggle(term);
+    return GDK_EVENT_STOP;
+  }
+
+  /* Ctrl+P = command palette */
+  if (keyval == GDK_KEY_p && has_ctrl && !has_shift && !has_alt) {
+    cmd_palette_show(self);
     return GDK_EVENT_STOP;
   }
 
@@ -406,15 +462,37 @@ static void act_about(GSimpleAction *action, GVariant *param,
   const char *authors[] = { "Xavier Araque <xavieraraque@gmail.com>", NULL };
   gtk_show_about_dialog(GTK_WINDOW(self),
     "program-name", "ShellBar",
-    "version", "1.6.0",
+    "version", "1.8.0",
     "comments",
-    "A configurable command-bar terminal emulator for Linux, built on libghostty-vt",
+    "A command-bar terminal emulator for Linux, built on libghostty-vt",
     "website", "https://github.com/rendergraf/shellbar",
     "website-label", "github.com/rendergraf/shellbar",
     "copyright", "© 2026 Xavier Araque",
     "license-type", GTK_LICENSE_MIT_X11,
+    "license",
+      "MIT License\n\n"
+      "Permission is hereby granted, free of charge, to any person "
+      "obtaining a copy of this software and associated documentation "
+      "files (the \"Software\"), to deal in the Software without "
+      "restriction, including without limitation the rights to use, "
+      "copy, modify, merge, publish, distribute, sublicense, and/or "
+      "sell copies of the Software, and to permit persons to whom "
+      "the Software is furnished to do so, subject to the following "
+      "conditions:\n\n"
+      "The above copyright notice and this permission notice shall "
+      "be included in all copies or substantial portions of the "
+      "Software.\n\n"
+      "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY "
+      "KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE "
+      "WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR "
+      "PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS "
+      "OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR "
+      "OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR "
+      "OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE "
+      "SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
     "authors", authors,
     "logo-icon-name", "shellbar",
+    "wrap-license", TRUE,
     NULL);
   SbTerminal *term = active_terminal(self);
   if (term) {
@@ -493,6 +571,65 @@ static void reload_buttons(SbWindow *self) {
   sb_config_free(config);
 }
 
+static gboolean on_cmd_idle_tick(gpointer userdata) {
+  SbTabEntry *tab = userdata;
+  tab->idle_timer = 0;
+
+  SbWindow *self = tab->window;
+  SbTerminal *act = active_terminal(self);
+  if (act == tab->terminal && tab->active_button >= 0)
+    sb_toolbar_set_button_highlight(self->toolbar, tab->active_button, FALSE);
+  return G_SOURCE_REMOVE;
+}
+
+static void on_terminal_activity(SbTerminal *terminal, void *userdata) {
+  SbWindow *self = userdata;
+  for (int i = 0; i < self->tab_count; i++) {
+    if (self->tabs[i].terminal == terminal) {
+      SbTabEntry *tab = &self->tabs[i];
+      if (tab->active_button < 0) return;
+      if (tab->idle_timer > 0)
+        g_source_remove(tab->idle_timer);
+      tab->idle_timer = g_timeout_add(5000, on_cmd_idle_tick, tab);
+
+      SbTerminal *act = active_terminal(self);
+      if (act == terminal)
+        sb_toolbar_set_button_highlight(self->toolbar,
+            tab->active_button, TRUE);
+      return;
+    }
+  }
+}
+
+static void on_toolbar_command(int index, void *userdata) {
+  SbWindow *self = userdata;
+  SbTerminal *term = active_terminal(self);
+  if (!term) return;
+  for (int i = 0; i < self->tab_count; i++) {
+    if (self->tabs[i].terminal == term) {
+      self->tabs[i].active_button = index;
+      on_terminal_activity(term, self);
+      return;
+    }
+  }
+}
+
+static void on_terminal_enter(SbTerminal *terminal, void *userdata) {
+  SbWindow *self = userdata;
+  for (int i = 0; i < self->tab_count; i++) {
+    if (self->tabs[i].terminal == terminal) {
+      if (self->tabs[i].idle_timer > 0) {
+        g_source_remove(self->tabs[i].idle_timer);
+        self->tabs[i].idle_timer = 0;
+      }
+      self->tabs[i].active_button = -1;
+      for (int j = 0; j < self->shortcut_count; j++)
+        sb_toolbar_set_button_highlight(self->toolbar, j, FALSE);
+      return;
+    }
+  }
+}
+
 /* ---- SIGHUP ---- */
 
 static int sighup_pipe[2] = {-1, -1};
@@ -550,6 +687,36 @@ static void sb_window_dispose(GObject *object) {
     self->toolbar = NULL;
   }
 
+  if (self->cmd_palette) {
+    gtk_widget_unparent(self->cmd_palette);
+    self->cmd_palette = NULL;
+    self->cmd_list_view = NULL;
+  }
+
+  g_clear_object(&self->cmd_store);
+  self->cmd_sorter = NULL;
+  g_free(self->cmd_search_text);
+  self->cmd_search_text = NULL;
+
+  if (self->cmd_usage_counts) {
+    cmd_usage_save(self);
+    g_hash_table_unref(self->cmd_usage_counts);
+    self->cmd_usage_counts = NULL;
+  }
+
+  if (self->cmd_hist_cache) {
+    g_hash_table_unref(self->cmd_hist_cache);
+    self->cmd_hist_cache = NULL;
+  }
+
+  if (self->cmd_index_callback > 0) {
+    g_source_remove(self->cmd_index_callback);
+    self->cmd_index_callback = 0;
+  }
+
+  sb_indexer_free(self->indexer);
+  self->indexer = NULL;
+
   G_OBJECT_CLASS(sb_window_parent_class)->dispose(object);
 }
 
@@ -584,6 +751,564 @@ create_menu_popup(GtkMenuButton *button, gpointer user_data) {
   gtk_popover_set_position(GTK_POPOVER(popover), GTK_POS_TOP);
   gtk_menu_button_set_popover(button, popover);
 }
+
+/* ------------------------------------------------------------------ */
+/* Command Palette (Ctrl+P)                                             */
+/* ------------------------------------------------------------------ */
+
+static void on_cmd_index_complete(GObject *source, GAsyncResult *result,
+                                   gpointer user_data) {
+  SbWindow *self = user_data;
+  (void)source;
+  GError *error = NULL;
+  gboolean ok = sb_indexer_start_finish(self->indexer, result, &error);
+  if (error) {
+    g_warning("sb_window: indexer failed: %s", error->message);
+    g_error_free(error);
+    return;
+  }
+  if (ok) {
+    const char *current = self->cmd_search_text ? self->cmd_search_text : "";
+    cmd_palette_populate_filtered(self, current);
+  }
+  self->cmd_index_callback = 0;
+}
+
+static void cmd_palette_populate_filtered(SbWindow *self, const char *prefix) {
+  GPtrArray *items = g_ptr_array_new();
+
+  if (self->cmd_hist_cache) {
+    GHashTableIter iter;
+    gpointer key;
+    g_hash_table_iter_init(&iter, self->cmd_hist_cache);
+    while (g_hash_table_iter_next(&iter, &key, NULL)) {
+      const char *cmd = (const char *)key;
+      if (!prefix || !prefix[0] ||
+          g_ascii_strncasecmp(cmd, prefix, strlen(prefix)) == 0) {
+        char *tagged = g_strconcat("hist:", cmd, NULL);
+        g_ptr_array_add(items, gtk_string_object_new(tagged));
+        g_free(tagged);
+      }
+    }
+  }
+
+  GList *matches = sb_indexer_get_matches(self->indexer,
+    (prefix && prefix[0]) ? prefix : "");
+  if (matches) {
+    for (GList *l = matches; l; l = l->next) {
+      g_ptr_array_add(items,
+        gtk_string_object_new((const char *)l->data));
+      g_free(l->data);
+    }
+    g_list_free(matches);
+  }
+
+  gsize old_n = g_list_model_get_n_items(G_LIST_MODEL(self->cmd_store));
+  g_list_store_splice(self->cmd_store, 0, old_n,
+    items->pdata, items->len);
+
+  for (guint i = 0; i < items->len; i++)
+    g_object_unref(items->pdata[i]);
+  g_ptr_array_free(items, TRUE);
+}
+
+static void cmd_palette_activate(SbWindow *self, guint position) {
+  if (!GTK_IS_LIST_VIEW(self->cmd_list_view)) return;
+
+  GtkSingleSelection *sel = GTK_SINGLE_SELECTION(
+    gtk_list_view_get_model(GTK_LIST_VIEW(self->cmd_list_view)));
+  GListModel *model = gtk_single_selection_get_model(sel);
+  GObject *item = g_list_model_get_item(model, position);
+
+  if (!item) return;
+
+  const char *name = gtk_string_object_get_string(GTK_STRING_OBJECT(item));
+  const char *cmd_str = name;
+  if (g_str_has_prefix(name, "hist:"))
+    cmd_str = name + 5;
+  else {
+    const char *base = strrchr(name, '/');
+    cmd_str = base ? base + 1 : name;
+  }
+
+  cmd_usage_increment(self, cmd_str);
+
+  if (self->cmd_sorter)
+    gtk_sorter_changed(GTK_SORTER(self->cmd_sorter), GTK_SORTER_CHANGE_DIFFERENT);
+
+  SbTerminal *term = active_terminal(self);
+  if (term) {
+    sb_terminal_write_str(term, cmd_str);
+    if (self->cmd_auto_execute) {
+      sb_terminal_write(term, "\n", 1);
+      cmd_usage_save(self);
+    }
+  }
+
+  g_object_unref(item);
+  gtk_popover_popdown(GTK_POPOVER(self->cmd_palette));
+}
+
+static void on_cmd_entry_activate(GtkEntry *entry, gpointer user_data) {
+  (void)entry;
+  SbWindow *self = user_data;
+
+  if (!GTK_IS_LIST_VIEW(self->cmd_list_view)) return;
+
+  GtkSingleSelection *sel = GTK_SINGLE_SELECTION(
+    gtk_list_view_get_model(GTK_LIST_VIEW(self->cmd_list_view)));
+  guint pos = gtk_single_selection_get_selected(sel);
+  if (pos == GTK_INVALID_LIST_POSITION) pos = 0;
+
+  cmd_palette_activate(self, pos);
+}
+
+static gboolean on_cmd_entry_key(GtkEventControllerKey *controller,
+                                  guint keyval, guint keycode,
+                                  GdkModifierType state,
+                                  gpointer user_data) {
+  (void)controller;
+  (void)keycode;
+  (void)state;
+  SbWindow *self = user_data;
+
+  if (keyval == GDK_KEY_Escape) {
+    gtk_popover_popdown(GTK_POPOVER(self->cmd_palette));
+    return GDK_EVENT_STOP;
+  }
+
+  if (!GTK_IS_LIST_VIEW(self->cmd_list_view)) return GDK_EVENT_PROPAGATE;
+
+  GtkSingleSelection *sel = GTK_SINGLE_SELECTION(
+    gtk_list_view_get_model(GTK_LIST_VIEW(self->cmd_list_view)));
+  guint count = g_list_model_get_n_items(G_LIST_MODEL(sel));
+  guint cur = gtk_single_selection_get_selected(sel);
+
+  if (keyval == GDK_KEY_Down || keyval == GDK_KEY_KP_Down) {
+    guint next = (cur == GTK_INVALID_LIST_POSITION || cur + 1 >= count)
+                   ? 0 : cur + 1;
+    if (count > 0) {
+      gtk_single_selection_set_selected(sel, next);
+      gtk_list_view_scroll_to(GTK_LIST_VIEW(self->cmd_list_view), next,
+                              GTK_LIST_SCROLL_SELECT, NULL);
+    }
+    return GDK_EVENT_STOP;
+  }
+
+  if (keyval == GDK_KEY_Up || keyval == GDK_KEY_KP_Up) {
+    guint prev = (cur == GTK_INVALID_LIST_POSITION || cur == 0)
+                   ? (count > 0 ? count - 1 : GTK_INVALID_LIST_POSITION)
+                   : cur - 1;
+    if (count > 0) {
+      gtk_single_selection_set_selected(sel, prev);
+      gtk_list_view_scroll_to(GTK_LIST_VIEW(self->cmd_list_view), prev,
+                              GTK_LIST_SCROLL_SELECT, NULL);
+    }
+    return GDK_EVENT_STOP;
+  }
+
+  return GDK_EVENT_PROPAGATE;
+}
+
+static void on_cmd_entry_changed(GtkEditable *editable, gpointer user_data) {
+  SbWindow *self = user_data;
+  const char *text = gtk_editable_get_text(editable);
+  g_free(self->cmd_search_text);
+  self->cmd_search_text = g_strdup(text);
+  cmd_palette_populate_filtered(self, text);
+}
+
+static void on_cmd_list_activate(GtkListView *list, guint position,
+                                  gpointer user_data) {
+  (void)list;
+  cmd_palette_activate((SbWindow *)user_data, position);
+}
+
+static void cmd_list_on_selected(GObject *obj, GParamSpec *pspec,
+                                   gpointer user_data) {
+  (void)pspec;
+  GtkListItem *item = GTK_LIST_ITEM(obj);
+  GtkWidget *label = GTK_WIDGET(user_data);
+  gboolean sel = FALSE;
+  g_object_get(obj, "selected", &sel, NULL);
+  if (sel)
+    gtk_widget_add_css_class(label, "sb-cmd-selected");
+  else
+    gtk_widget_remove_css_class(label, "sb-cmd-selected");
+}
+
+static void cmd_list_setup(GtkSignalListItemFactory *factory,
+                            GtkListItem *list_item, gpointer user_data) {
+  (void)factory;
+  (void)user_data;
+  GtkWidget *label = gtk_label_new(NULL);
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+  gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
+  gtk_widget_set_margin_start(label, 10);
+  gtk_widget_set_margin_end(label, 10);
+  gtk_list_item_set_child(list_item, label);
+  g_signal_connect(list_item, "notify::selected",
+    G_CALLBACK(cmd_list_on_selected), label);
+}
+
+static void cmd_list_bind(GtkSignalListItemFactory *factory,
+                           GtkListItem *list_item, gpointer user_data) {
+  (void)factory;
+  (void)user_data;
+  GtkStringObject *item =
+    GTK_STRING_OBJECT(gtk_list_item_get_item(list_item));
+  if (!item) return;
+
+  const char *name = gtk_string_object_get_string(item);
+  GtkWidget *label = gtk_list_item_get_child(list_item);
+
+  if (g_str_has_prefix(name, "hist:")) {
+    gtk_widget_remove_css_class(label, "sb-cmd-path");
+    gtk_widget_add_css_class(label, "sb-cmd-hist");
+    gtk_label_set_text(GTK_LABEL(label), name + 5);
+  } else {
+    gtk_widget_remove_css_class(label, "sb-cmd-hist");
+    gtk_widget_add_css_class(label, "sb-cmd-path");
+    const char *base = strrchr(name, '/');
+    base = base ? base + 1 : name;
+    gtk_label_set_text(GTK_LABEL(label), base);
+  }
+
+  gboolean sel = FALSE;
+  g_object_get(list_item, "selected", &sel, NULL);
+  if (sel)
+    gtk_widget_add_css_class(label, "sb-cmd-selected");
+  else
+    gtk_widget_remove_css_class(label, "sb-cmd-selected");
+}
+
+static GtkWidget *build_cmd_palette(SbWindow *self) {
+  GtkWidget *popover = gtk_popover_new();
+
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+  gtk_widget_set_margin_top(box, 6);
+  gtk_widget_set_margin_bottom(box, 6);
+  gtk_widget_set_margin_start(box, 6);
+  gtk_widget_set_margin_end(box, 6);
+
+  GtkWidget *entry = gtk_entry_new();
+  gtk_entry_set_placeholder_text(GTK_ENTRY(entry), "Run command...");
+  gtk_widget_add_css_class(entry, "flat");
+  g_signal_connect(entry, "activate",
+    G_CALLBACK(on_cmd_entry_activate), self);
+  g_signal_connect(entry, "changed",
+    G_CALLBACK(on_cmd_entry_changed), self);
+
+  GtkEventController *key_ctrl = gtk_event_controller_key_new();
+  gtk_event_controller_set_propagation_phase(key_ctrl, GTK_PHASE_CAPTURE);
+  g_signal_connect(key_ctrl, "key-pressed",
+    G_CALLBACK(on_cmd_entry_key), self);
+  gtk_widget_add_controller(entry, key_ctrl);
+
+  gtk_box_append(GTK_BOX(box), entry);
+  self->cmd_entry = entry;
+
+  GtkWidget *scrolled = gtk_scrolled_window_new();
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
+    GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), FALSE);
+  gtk_scrolled_window_set_min_content_height(
+    GTK_SCROLLED_WINDOW(scrolled), 200);
+  gtk_scrolled_window_set_max_content_height(
+    GTK_SCROLLED_WINDOW(scrolled), 400);
+
+  GtkListItemFactory *factory = gtk_signal_list_item_factory_new();
+  g_signal_connect(factory, "setup",
+    G_CALLBACK(cmd_list_setup), NULL);
+  g_signal_connect(factory, "bind",
+    G_CALLBACK(cmd_list_bind), NULL);
+
+  self->cmd_sorter = gtk_custom_sorter_new(cmd_sort_func, self, NULL);
+
+  GtkSortListModel *sort_model = gtk_sort_list_model_new(
+    G_LIST_MODEL(self->cmd_store), GTK_SORTER(self->cmd_sorter));
+
+  GtkSingleSelection *selection = gtk_single_selection_new(
+    G_LIST_MODEL(sort_model));
+  gtk_single_selection_set_autoselect(selection, TRUE);
+
+  GtkWidget *list_view = gtk_list_view_new(
+    GTK_SELECTION_MODEL(selection), factory);
+  self->cmd_list_view = list_view;
+  gtk_list_view_set_single_click_activate(GTK_LIST_VIEW(list_view), TRUE);
+  g_signal_connect(list_view, "activate",
+    G_CALLBACK(on_cmd_list_activate), self);
+
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), list_view);
+
+  gtk_widget_set_vexpand(scrolled, TRUE);
+  gtk_box_append(GTK_BOX(box), scrolled);
+
+  gtk_popover_set_child(GTK_POPOVER(popover), box);
+  gtk_popover_set_has_arrow(GTK_POPOVER(popover), FALSE);
+  gtk_popover_set_position(GTK_POPOVER(popover), GTK_POS_TOP);
+
+  GtkCssProvider *css = gtk_css_provider_new();
+  gtk_css_provider_load_from_string(css,
+    "popover.contents {"
+    "  padding: 8px;"
+    "  border-radius: 12px;"
+    "  min-width: 280px;"
+    "}"
+    "popover.contents entry {"
+    "  background: alpha(@window_fg_color, 0.08);"
+    "  border: none;"
+    "  border-radius: 8px;"
+    "  box-shadow: none;"
+    "  min-height: 32px;"
+    "  padding: 4px 10px;"
+    "  font-size: 13px;"
+    "}"
+    "listview row {"
+    "  padding: 2px 6px;"
+    "  border-radius: 6px;"
+    "}"
+    "listview row:selected {"
+    "  background: alpha(@accent_bg_color, 0.30);"
+    "  border: 1px solid alpha(@accent_bg_color, 0.15);"
+    "}"
+    ".sb-cmd-path {}"
+    ".sb-cmd-hist { font-style: italic; color: alpha(@window_fg_color, 0.65); }"
+    ".sb-cmd-selected {"
+    "  background: alpha(@accent_bg_color, 0.30);"
+    "  border-radius: 6px;"
+    "}"
+  );
+  gtk_style_context_add_provider_for_display(
+    gtk_widget_get_display(popover),
+    GTK_STYLE_PROVIDER(css),
+    GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  g_object_unref(css);
+
+  return popover;
+}
+
+static void cmd_palette_show(SbWindow *self) {
+  if (!self->cmd_palette) {
+    self->cmd_palette = build_cmd_palette(self);
+    GtkWidget *win = GTK_WIDGET(self);
+    gtk_widget_set_parent(self->cmd_palette, win);
+  }
+
+  if (g_list_model_get_n_items(G_LIST_MODEL(self->cmd_store)) == 0)
+    cmd_palette_populate_filtered(self, "");
+
+  g_free(self->cmd_search_text);
+  self->cmd_search_text = NULL;
+
+  gtk_editable_set_text(GTK_EDITABLE(self->cmd_entry), "");
+
+  int win_w = gtk_widget_get_width(GTK_WIDGET(self));
+  int pal_w = win_w > 620 ? 560 : win_w - 60;
+  if (pal_w < 280) pal_w = 280;
+  GdkRectangle rect = { (win_w - pal_w) / 2, 44, pal_w, 1 };
+  gtk_popover_set_pointing_to(GTK_POPOVER(self->cmd_palette), &rect);
+
+  gtk_popover_popup(GTK_POPOVER(self->cmd_palette));
+  gtk_widget_grab_focus(self->cmd_entry);
+}
+
+static void cmd_palette_hide(SbWindow *self) {
+  if (self->cmd_palette)
+    gtk_popover_popdown(GTK_POPOVER(self->cmd_palette));
+}
+
+static void cmd_usage_load(SbWindow *self) {
+  self->cmd_usage_counts = g_hash_table_new_full(g_str_hash, g_str_equal,
+                                                  g_free, g_free);
+
+  const char *home = g_get_home_dir();
+  if (!home) return;
+
+  char *dir = g_build_filename(home, ".cache", "shellbar", NULL);
+  g_mkdir_with_parents(dir, 0700);
+
+  char *path = g_build_filename(dir, "usage.conf", NULL);
+  g_free(dir);
+
+  GKeyFile *kf = g_key_file_new();
+  GError *err = NULL;
+  if (!g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, &err)) {
+    g_clear_error(&err);
+    g_key_file_free(kf);
+    g_free(path);
+    return;
+  }
+
+  gsize len = 0;
+  gchar **keys = g_key_file_get_keys(kf, "counts", &len, NULL);
+  if (keys) {
+    for (gsize i = 0; i < len; i++) {
+      int count = g_key_file_get_integer(kf, "counts", keys[i], NULL);
+      if (count > 0)
+        g_hash_table_insert(self->cmd_usage_counts,
+                            g_strdup(keys[i]),
+                            g_memdup2(&count, sizeof(int)));
+    }
+    g_strfreev(keys);
+  }
+
+  g_key_file_free(kf);
+  g_free(path);
+}
+
+static void cmd_usage_save(SbWindow *self) {
+  if (!self->cmd_usage_counts) return;
+
+  const char *home = g_get_home_dir();
+  if (!home) return;
+
+  char *dir = g_build_filename(home, ".cache", "shellbar", NULL);
+  g_mkdir_with_parents(dir, 0700);
+
+  char *path = g_build_filename(dir, "usage.conf", NULL);
+  g_free(dir);
+
+  GKeyFile *kf = g_key_file_new();
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, self->cmd_usage_counts);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    int *count = value;
+    if (*count > 0)
+      g_key_file_set_integer(kf, "counts", (const char *)key, *count);
+  }
+
+  GError *err = NULL;
+  g_key_file_save_to_file(kf, path, &err);
+  g_clear_error(&err);
+  g_key_file_free(kf);
+  g_free(path);
+}
+
+static void cmd_usage_increment(SbWindow *self, const char *command) {
+  if (!command || !command[0]) return;
+  int *count = g_hash_table_lookup(self->cmd_usage_counts, command);
+  if (count) {
+    (*count)++;
+  } else {
+    int *c = g_new(int, 1);
+    *c = 1;
+    g_hash_table_insert(self->cmd_usage_counts, g_strdup(command), c);
+  }
+}
+
+static int cmd_usage_lookup(SbWindow *self, const char *command) {
+  if (!command) return 0;
+  int *count = g_hash_table_lookup(self->cmd_usage_counts, command);
+  return count ? *count : 0;
+}
+
+static int cmd_sort_func(gconstpointer a, gconstpointer b,
+                         gpointer user_data) {
+  SbWindow *self = user_data;
+  const char *na = gtk_string_object_get_string(
+    GTK_STRING_OBJECT((gpointer)a));
+  const char *nb = gtk_string_object_get_string(
+    GTK_STRING_OBJECT((gpointer)b));
+
+  const char *ca_key = na;
+  if (g_str_has_prefix(na, "hist:"))
+    ca_key = na + 5;
+  else {
+    const char *base = strrchr(na, '/');
+    ca_key = base ? base + 1 : na;
+  }
+
+  const char *cb_key = nb;
+  if (g_str_has_prefix(nb, "hist:"))
+    cb_key = nb + 5;
+  else {
+    const char *base = strrchr(nb, '/');
+    cb_key = base ? base + 1 : nb;
+  }
+
+  int ca = cmd_usage_lookup(self, ca_key);
+  int cb = cmd_usage_lookup(self, cb_key);
+
+  if (ca > cb) return -1;
+  if (ca < cb) return  1;
+  return strcmp(ca_key, cb_key);
+}
+
+#define CMD_HIST_MAX 500
+
+static void cmd_history_load(SbWindow *self) {
+  self->cmd_hist_cache = g_hash_table_new_full(g_str_hash, g_str_equal,
+                                                g_free, NULL);
+
+  const char *home = g_get_home_dir();
+  if (!home) return;
+
+  const char *hist_files[] = { ".zsh_history", ".bash_history", NULL };
+  const char *hist_path = NULL;
+
+  for (int i = 0; hist_files[i]; i++) {
+    char *cand = g_build_filename(home, hist_files[i], NULL);
+    if (g_file_test(cand, G_FILE_TEST_IS_REGULAR)) {
+      hist_path = cand;
+      break;
+    }
+    g_free(cand);
+  }
+
+  if (!hist_path) return;
+
+  char *content = NULL;
+  gsize content_len = 0;
+  if (!g_file_get_contents(hist_path, &content, &content_len, NULL)) {
+    g_free((char *)hist_path);
+    return;
+  }
+
+  int added = 0;
+  char *line = content;
+  char *end = content + content_len;
+
+  while (line < end && added < CMD_HIST_MAX) {
+    char *nl = memchr(line, '\n', (size_t)(end - line));
+    gsize line_len = nl ? (gsize)(nl - line) : (gsize)(end - line);
+
+    if (line_len > 0 && line_len < 4096) {
+      if (line[0] == ':' && line_len > 2) {
+        const char *cmd_start = memchr(line, ';', line_len);
+        if (cmd_start) {
+          cmd_start++;
+          gsize cmd_len = line_len - (gsize)(cmd_start - line);
+          char *orig = g_strndup(cmd_start, cmd_len);
+          char *trimmed = g_strstrip(orig);
+          if (trimmed[0] && trimmed[0] != ' '
+              && !g_hash_table_contains(self->cmd_hist_cache, trimmed)) {
+            g_hash_table_add(self->cmd_hist_cache, g_strdup(trimmed));
+            added++;
+          }
+          g_free(orig);
+        }
+      } else {
+        char *orig = g_strndup(line, line_len);
+        char *trimmed = g_strstrip(orig);
+        if (trimmed[0] && trimmed[0] != ' '
+            && !g_hash_table_contains(self->cmd_hist_cache, trimmed)) {
+          g_hash_table_add(self->cmd_hist_cache, g_strdup(trimmed));
+          added++;
+        }
+        g_free(orig);
+      }
+    }
+
+    line = nl ? nl + 1 : end;
+  }
+
+  g_free(content);
+  g_free((char *)hist_path);
+}
+
+/* ---- Command Palette end ---- */
 
 /* ------------------------------------------------------------------ */
 /* Utility bar                                                         */
@@ -770,7 +1495,17 @@ static void sb_window_init(SbWindow *self) {
 
   /* ---- Toolbar ---- */
   self->toolbar = sb_toolbar_new();
+  sb_toolbar_set_command_callback(self->toolbar, on_toolbar_command, self);
   reload_buttons(self);
+
+  /* ---- Indexer ---- */
+  self->indexer = sb_indexer_new();
+  self->cmd_store = g_list_store_new(GTK_TYPE_STRING_OBJECT);
+  self->cmd_auto_execute = FALSE;
+  cmd_usage_load(self);
+  cmd_history_load(self);
+  sb_indexer_start_async(self->indexer, NULL,
+    on_cmd_index_complete, self);
 
   /* ---- Toolbar revealer (hidden by default, slides up from bottom) ---- */
   self->toolbar_revealer = gtk_revealer_new();

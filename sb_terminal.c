@@ -1,9 +1,10 @@
 /*
- * ShellBar v1.7.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
 #include "sb_terminal.h"
+#include "sb_indexer.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -68,12 +69,19 @@ struct _SbTerminal {
   SbTerminalTitleCb title_cb;
   void *title_cb_data;
 
+  SbTerminalActivityCb activity_cb;
+  void *activity_cb_data;
+
+  SbTerminalEnterCb enter_cb;
+  void *enter_cb_data;
+
   char last_title[256];
 
   int sel_start_col, sel_start_row;
   int sel_end_col, sel_end_row;
   bool has_selection;
   bool selecting;
+  int viewport_offset;
 
   SbConfigKeybind *keybinds;
   int keybind_count;
@@ -119,6 +127,11 @@ struct _SbTerminal {
   int search_hl_col;
   int search_hl_len;
   bool search_hl_visible;
+
+  SbIndexer *indexer;
+  char pending_suggestion[256];
+  bool has_suggestion;
+  guint suggestion_timer;
 };
 
 /* ------------------------------------------------------------------ */
@@ -134,30 +147,37 @@ static void selection_clear(SbTerminal *self) {
 static void selection_from_cell_coords(SbTerminal *self,
                                         int col_a, int row_a,
                                         int col_b, int row_b) {
+  int off = self->viewport_offset;
   if (col_a < col_b || (col_a == col_b && row_a < row_b)) {
-    self->sel_start_col = col_a; self->sel_start_row = row_a;
-    self->sel_end_col = col_b;   self->sel_end_row = row_b;
+    self->sel_start_col = col_a; self->sel_start_row = row_a + off;
+    self->sel_end_col = col_b;   self->sel_end_row = row_b + off;
   } else {
-    self->sel_start_col = col_b; self->sel_start_row = row_b;
-    self->sel_end_col = col_a;   self->sel_end_row = row_a;
+    self->sel_start_col = col_b; self->sel_start_row = row_b + off;
+    self->sel_end_col = col_a;   self->sel_end_row = row_a + off;
   }
   if (self->sel_start_col < 0) self->sel_start_col = 0;
-  if (self->sel_start_row < 0) self->sel_start_row = 0;
+  if (self->sel_start_row < off) self->sel_start_row = off;
   if (self->sel_end_col >= (int)self->cols) self->sel_end_col = self->cols - 1;
-  if (self->sel_end_row >= (int)self->rows) self->sel_end_row = self->rows - 1;
   self->has_selection = true;
 }
 
 static bool cell_is_selected(SbTerminal *self, int col, int row) {
   if (!self->has_selection) return false;
-  if (row < self->sel_start_row || row > self->sel_end_row) return false;
-  if (row == self->sel_start_row && col < self->sel_start_col) return false;
-  if (row == self->sel_end_row && col > self->sel_end_col) return false;
+  int srow = row + self->viewport_offset;
+  if (srow < self->sel_start_row || srow > self->sel_end_row) return false;
+  if (srow == self->sel_start_row && col < self->sel_start_col) return false;
+  if (srow == self->sel_end_row && col > self->sel_end_col) return false;
   return true;
 }
 
 static char *selection_get_text(SbTerminal *self) {
   if (!self->has_selection) return NULL;
+
+  int vp_start = self->sel_start_row - self->viewport_offset;
+  int vp_end   = self->sel_end_row   - self->viewport_offset;
+  if (vp_start >= (int)self->rows || vp_end < 0) return NULL;
+  if (vp_start < 0) vp_start = 0;
+  if (vp_end >= (int)self->rows) vp_end = (int)self->rows - 1;
 
   GString *result = g_string_new("");
   int prev_row = -1;
@@ -169,8 +189,8 @@ static char *selection_get_text(SbTerminal *self) {
 
   int row_idx = 0;
   while (ghostty_render_state_row_iterator_next(self->row_iter)) {
-    if (row_idx < self->sel_start_row) { row_idx++; continue; }
-    if (row_idx > self->sel_end_row) break;
+    if (row_idx < vp_start) { row_idx++; continue; }
+    if (row_idx > vp_end) break;
 
     if (ghostty_render_state_row_get(self->row_iter,
           GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, &self->cells)
@@ -184,9 +204,9 @@ static char *selection_get_text(SbTerminal *self) {
     int col_idx = 0;
     int last_selected_col = -1;
     while (ghostty_render_state_row_cells_next(self->cells)) {
-      if (col_idx < self->sel_start_col && row_idx == self->sel_start_row)
+      if (col_idx < self->sel_start_col && row_idx == vp_start)
         { col_idx++; continue; }
-      if (col_idx > self->sel_end_col && row_idx == self->sel_end_row)
+      if (col_idx > self->sel_end_col && row_idx == vp_end)
         break;
       if (!cell_is_selected(self, col_idx, row_idx))
         { col_idx++; continue; }
@@ -209,7 +229,7 @@ static char *selection_get_text(SbTerminal *self) {
       }
       col_idx++;
     }
-    if (last_selected_col < self->sel_end_col && row_idx == self->sel_end_row) {
+    if (last_selected_col < self->sel_end_col && row_idx == vp_end) {
       /* already covered by the check above */
     }
     prev_row = row_idx;
@@ -997,6 +1017,8 @@ static gboolean clear_follow(gpointer user_data) {
 }
 
 static void auto_scroll_to_bottom(SbTerminal *self) {
+  if (self->scroll_anim_timer > 0) return;
+
   GhosttyTerminalScrollbar scrollbar = {0};
   if (ghostty_terminal_get(self->terminal,
         GHOSTTY_TERMINAL_DATA_SCROLLBAR, &scrollbar) != GHOSTTY_SUCCESS)
@@ -1008,9 +1030,6 @@ static void auto_scroll_to_bottom(SbTerminal *self) {
   int bottom = (int)(scrollbar.total - scrollbar.len);
   if (scrollbar.offset >= bottom)
     return;
-
-  if (self->scroll_anim_timer > 0)
-    g_source_remove(self->scroll_anim_timer);
 
   self->scroll_anim_timer = g_timeout_add(16, on_scroll_animate, self);
 }
@@ -1166,7 +1185,7 @@ static bool effect_device_attributes(GhosttyTerminal terminal, void *userdata,
 static GhosttyString effect_xtversion(GhosttyTerminal terminal, void *userdata) {
   (void)terminal;
   (void)userdata;
-  return (GhosttyString){ .ptr = (const uint8_t *)"shellbar 1.6.0", .len = 15 };
+  return (GhosttyString){ .ptr = (const uint8_t *)"shellbar 1.8.0", .len = 15 };
 }
 
 static bool effect_color_scheme(GhosttyTerminal terminal, void *userdata,
@@ -1247,6 +1266,9 @@ static gboolean on_pty_readable(GIOChannel *channel,
     gtk_widget_queue_draw(self->widget);
   }
 
+  if (self->activity_cb)
+    self->activity_cb(self, self->activity_cb_data);
+
   return G_SOURCE_CONTINUE;
 }
 
@@ -1325,6 +1347,9 @@ static uint32_t gdk_keyval_unshifted_codepoint(guint keyval) {
 /* Keyboard event handlers                                            */
 /* ------------------------------------------------------------------ */
 
+static void clear_suggestion(SbTerminal *self);
+static void schedule_suggestion_lookup(SbTerminal *self);
+
 static gboolean on_terminal_key(GtkEventControllerKey *controller,
                                 guint keyval, guint keycode,
                                 GdkModifierType state,
@@ -1337,6 +1362,37 @@ static gboolean on_terminal_key(GtkEventControllerKey *controller,
 gboolean sb_terminal_handle_key(SbTerminal *self, guint keyval,
                                 guint keycode, GdkModifierType state) {
   (void)keycode;
+
+  GhosttyTerminalScrollbar sb = {0};
+  if (ghostty_terminal_get(self->terminal,
+        GHOSTTY_TERMINAL_DATA_SCROLLBAR, &sb) == GHOSTTY_SUCCESS
+      && sb.total > sb.len && sb.offset < sb.total - sb.len) {
+    switch (keyval) {
+      case GDK_KEY_Up: case GDK_KEY_KP_Up:
+      case GDK_KEY_Down: case GDK_KEY_KP_Down:
+      case GDK_KEY_Left: case GDK_KEY_KP_Left:
+      case GDK_KEY_Right: case GDK_KEY_KP_Right:
+      case GDK_KEY_Page_Up: case GDK_KEY_KP_Page_Up:
+      case GDK_KEY_Page_Down: case GDK_KEY_KP_Page_Down:
+      case GDK_KEY_Home: case GDK_KEY_KP_Home:
+      case GDK_KEY_End: case GDK_KEY_KP_End:
+        break;
+      default:
+        auto_scroll_to_bottom(self);
+        break;
+    }
+  }
+
+  /* Right arrow or Ctrl+E → accept ghost-text suggestion */
+  if ((keyval == GDK_KEY_Right || keyval == GDK_KEY_KP_Right)
+      && !(state & (GDK_SHIFT_MASK | GDK_ALT_MASK | GDK_SUPER_MASK))) {
+    if (self->has_suggestion && self->pending_suggestion[0]) {
+      sb_terminal_write_str(self, self->pending_suggestion);
+      clear_suggestion(self);
+      gtk_widget_queue_draw(self->widget);
+      return GDK_EVENT_STOP;
+    }
+  }
 
   /* Normalize keyval (Shift+c arrives as 'C'); compare case-insensitively
    * against configured keybinds. */
@@ -1417,6 +1473,8 @@ gboolean sb_terminal_handle_key(SbTerminal *self, guint keyval,
     if (self->follow_timer > 0)
       g_source_remove(self->follow_timer);
     self->follow_timer = g_timeout_add(2000, clear_follow, self);
+    if (self->enter_cb)
+      self->enter_cb(self, self->enter_cb_data);
   }
 
   static char sb_utf8[8] = {0};
@@ -1469,13 +1527,110 @@ gboolean sb_terminal_handle_key(SbTerminal *self, guint keyval,
   if (res != GHOSTTY_SUCCESS || written == 0) {
     if (have_utf8) {
       pty_write_raw(self->pty_fd, sb_utf8, strlen(sb_utf8));
+      schedule_suggestion_lookup(self);
       return GDK_EVENT_STOP;
     }
     return GDK_EVENT_PROPAGATE;
   }
 
   pty_write_raw(self->pty_fd, buf, written);
+  schedule_suggestion_lookup(self);
   return GDK_EVENT_STOP;
+}
+
+/* ------------------------------------------------------------------ */
+/* Ghost-text suggestion lookup                                         */
+/* ------------------------------------------------------------------ */
+
+static void clear_suggestion(SbTerminal *self) {
+  self->has_suggestion = FALSE;
+  self->pending_suggestion[0] = '\0';
+}
+
+static gboolean on_suggestion_tick(gpointer user_data) {
+  SbTerminal *self = user_data;
+  self->suggestion_timer = 0;
+
+  clear_suggestion(self);
+  if (!self->indexer) return G_SOURCE_REMOVE;
+
+  ghostty_render_state_update(self->render_state, self->terminal);
+
+  uint16_t cx = 0, cy = 0;
+  ghostty_render_state_get(self->render_state,
+    GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X, &cx);
+  ghostty_render_state_get(self->render_state,
+    GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y, &cy);
+
+  int *map = g_malloc((self->cols + 1) * sizeof(int));
+  char *line = read_row_text(self, (int)cy, map);
+  if (!line) {
+    g_free(map);
+    return G_SOURCE_REMOVE;
+  }
+
+  int byte_end = map[cx];
+  char *pre_cursor = g_strndup(line, byte_end);
+
+  if (byte_end > 0) {
+    const char *prefix = pre_cursor;
+    for (int i = byte_end - 1; i >= 0; i--) {
+      if (pre_cursor[i] == ' ') { prefix = pre_cursor + i + 1; break; }
+    }
+    while (*prefix == ' ') prefix++;
+
+    if (prefix[0]) {
+      GList *matches = sb_indexer_get_matches(self->indexer, prefix);
+      if (matches) {
+        const char *best = NULL;
+        for (GList *l = matches; l; l = l->next) {
+          const char *path = (const char *)l->data;
+          const char *base = strrchr(path, '/');
+          base = base ? base + 1 : path;
+          if (g_str_has_prefix(base, prefix)) {
+            if (!best || strlen(base) < strlen(best)) best = base;
+          }
+        }
+        if (best) {
+          const char *suffix = best + strlen(prefix);
+          g_strlcpy(self->pending_suggestion, suffix,
+                    sizeof(self->pending_suggestion));
+          if (self->pending_suggestion[0])
+            self->has_suggestion = TRUE;
+        }
+        g_list_free_full(matches, g_free);
+      }
+    }
+  }
+
+  g_free(pre_cursor);
+  g_free(line);
+  g_free(map);
+
+  gtk_widget_queue_draw(self->widget);
+  return G_SOURCE_REMOVE;
+}
+
+static void schedule_suggestion_lookup(SbTerminal *self) {
+  if (self->suggestion_timer > 0)
+    g_source_remove(self->suggestion_timer);
+  self->suggestion_timer = g_timeout_add(100, on_suggestion_tick, self);
+}
+
+void sb_terminal_set_indexer(SbTerminal *self, SbIndexer *indexer) {
+  self->indexer = indexer;
+}
+
+void sb_terminal_set_activity_callback(SbTerminal *self,
+    SbTerminalActivityCb cb, void *userdata) {
+  self->activity_cb = cb;
+  self->activity_cb_data = userdata;
+}
+
+void sb_terminal_set_enter_callback(SbTerminal *self,
+    SbTerminalEnterCb cb, void *userdata) {
+  self->enter_cb = cb;
+  self->enter_cb_data = userdata;
 }
 
 /* ------------------------------------------------------------------ */
@@ -2018,6 +2173,11 @@ static void render_terminal(GtkDrawingArea *area, cairo_t *cr,
 
   recalc_geometry(self, width, height);
 
+  GhosttyTerminalScrollbar sb = {0};
+  ghostty_terminal_get(self->terminal,
+    GHOSTTY_TERMINAL_DATA_SCROLLBAR, &sb);
+  self->viewport_offset = (int)sb.offset;
+
   /* Colors */
   GhosttyRenderStateColors colors =
     GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
@@ -2195,6 +2355,25 @@ static void render_terminal(GtkDrawingArea *area, cairo_t *cr,
     cairo_rectangle(cr, cur_x, cur_y, self->cell_width, self->cell_height);
     cairo_set_source_rgba(cr, cur.r / 255.0, cur.g / 255.0, cur.b / 255.0, 0.5);
     cairo_fill(cr);
+  }
+
+  if (self->has_suggestion && self->pending_suggestion[0]) {
+    uint16_t scx = 0, scy = 0;
+    ghostty_render_state_get(self->render_state,
+      GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X, &scx);
+    ghostty_render_state_get(self->render_state,
+      GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y, &scy);
+
+    int sx = self->padding + scx * self->cell_width;
+    int sy = self->padding + scy * self->cell_height;
+
+    pango_layout_set_text(layout, self->pending_suggestion, -1);
+    cairo_move_to(cr, sx, sy);
+
+    GhosttyColorRgb fgc = colors.foreground;
+    cairo_set_source_rgba(cr,
+      fgc.r / 255.0, fgc.g / 255.0, fgc.b / 255.0, 0.35);
+    pango_cairo_show_layout(cr, layout);
   }
 
   /* Draw scrollbar */
@@ -2529,6 +2708,8 @@ void sb_terminal_free(SbTerminal *self) {
     g_source_remove(self->scroll_anim_timer);
   if (self->follow_timer > 0)
     g_source_remove(self->follow_timer);
+  if (self->suggestion_timer > 0)
+    g_source_remove(self->suggestion_timer);
   if (self->zoom_timer > 0)
     g_source_remove(self->zoom_timer);
   if (self->search_update_timer > 0)

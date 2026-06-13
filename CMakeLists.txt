@@ -1,4 +1,4 @@
-# ShellBar v1.7.0 — A command-bar terminal emulator built on libghostty-vt
+# ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
 # Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
 # MIT License
 
@@ -30,6 +30,7 @@ add_executable(shellbar
   sb_config.c
   sb_preferences_dialog.c
   sb_theme.c
+  sb_indexer.c
 )
 
 file(GLOB ICON_FILES CONFIGURE_DEPENDS assets/icon-*.png assets/*.svg assets/logo.png)

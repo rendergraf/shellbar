@@ -1,5 +1,5 @@
 Name:           shellbar
-Version:        1.7.0
+Version:        1.8.0
 Release:        1%{?dist}
 Summary:        Terminal emulator with configurable command toolbar
 

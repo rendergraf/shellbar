@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.7.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -10,6 +10,10 @@ struct _SbToolbar {
   GtkWidget *widget;
   GtkBox *box;
   SbTerminal *active_terminal;
+  GtkWidget **buttons;
+  int button_count;
+  SbToolbarCommandCb command_cb;
+  void *command_cb_data;
 };
 
 SbToolbar *sb_toolbar_new(void) {
@@ -49,15 +53,37 @@ static void sb_toolbar_flash_button(GtkWidget *button) {
 static void on_button_clicked(GtkButton *button, gpointer user_data) {
   SbToolbar *self = user_data;
   const char *cmd = g_object_get_data(G_OBJECT(button), "sb-command");
+  int index = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "sb-index"));
   if (cmd && self->active_terminal) {
     sb_toolbar_flash_button(GTK_WIDGET(button));
+    sb_toolbar_set_button_highlight(self, index, TRUE);
+    if (self->command_cb)
+      self->command_cb(index, self->command_cb_data);
     sb_terminal_write_str(self->active_terminal, cmd);
     sb_terminal_write(self->active_terminal, "\n", 1);
   }
 }
 
+void sb_toolbar_set_button_highlight(SbToolbar *self, int index,
+                                     gboolean active) {
+  if (index < 0 || index >= self->button_count) return;
+  GtkWidget *btn = self->buttons[index];
+  if (!btn || !GTK_IS_WIDGET(btn)) return;
+  if (active)
+    gtk_widget_add_css_class(btn, "sb-active");
+  else
+    gtk_widget_remove_css_class(btn, "sb-active");
+}
+
+void sb_toolbar_set_command_callback(SbToolbar *self, SbToolbarCommandCb cb,
+                                     void *userdata) {
+  self->command_cb = cb;
+  self->command_cb_data = userdata;
+}
+
 static GtkWidget *sb_toolbar_add_button(SbToolbar *self, const char *name,
-                                        const char *command, const char *icon_name) {
+                                        const char *command, const char *icon_name,
+                                        int index) {
   GtkWidget *button;
   if (icon_name && icon_name[0] != '\0')
     button = gtk_button_new_from_icon_name(icon_name);
@@ -67,6 +93,8 @@ static GtkWidget *sb_toolbar_add_button(SbToolbar *self, const char *name,
   gtk_widget_set_tooltip_text(button, command);
   g_object_set_data_full(G_OBJECT(button), "sb-command",
     g_strdup(command), g_free);
+  g_object_set_data(G_OBJECT(button), "sb-index",
+    GINT_TO_POINTER(index));
   g_signal_connect(button, "clicked", G_CALLBACK(on_button_clicked), self);
   gtk_box_append(self->box, button);
   return button;
@@ -78,9 +106,13 @@ void sb_toolbar_set_buttons(SbToolbar *self, const SbToolbarButtonDef *buttons,
   while ((child = gtk_widget_get_first_child(self->widget)) != NULL)
     gtk_box_remove(self->box, child);
 
+  g_free(self->buttons);
+  self->buttons = g_malloc0(count * sizeof(GtkWidget *));
+  self->button_count = count;
+
   for (int i = 0; i < count; i++)
-    sb_toolbar_add_button(self, buttons[i].name,
-                          buttons[i].command, buttons[i].icon_name);
+    self->buttons[i] = sb_toolbar_add_button(self, buttons[i].name,
+                           buttons[i].command, buttons[i].icon_name, i);
 
   GtkWidget *add_btn = gtk_button_new_with_label("+");
   gtk_widget_set_tooltip_text(add_btn, "Add command");
@@ -97,5 +129,6 @@ GtkWidget *sb_toolbar_get_widget(SbToolbar *self) {
 
 void sb_toolbar_free(SbToolbar *self) {
   if (!self) return;
+  g_free(self->buttons);
   g_free(self);
 }

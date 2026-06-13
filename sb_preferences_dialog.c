@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.7.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -435,7 +435,7 @@ void sb_preferences_dialog_show(GtkWindow *parent, gpointer reload_target,
   gtk_window_set_modal(GTK_WINDOW(win), TRUE);
   gtk_window_set_transient_for(GTK_WINDOW(win), parent);
   gtk_window_set_title(GTK_WINDOW(win), "Preferences");
-  gtk_window_set_default_size(GTK_WINDOW(win), 520, 480);
+  gtk_window_set_default_size(GTK_WINDOW(win), 560, 540);
   pd->window = win;
   g_signal_connect(win, "destroy", G_CALLBACK(on_destroy), pd);
 
@@ -461,8 +461,13 @@ void sb_preferences_dialog_show(GtkWindow *parent, gpointer reload_target,
   g_signal_connect(save_btn, "clicked", G_CALLBACK(on_save), pd);
   adw_header_bar_pack_end(ADW_HEADER_BAR(header), save_btn);
 
-  /* Content */
-  GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  /* Content — Stack with two pages */
+  GtkWidget *stack = gtk_stack_new();
+  gtk_stack_set_transition_type(GTK_STACK(stack),
+    GTK_STACK_TRANSITION_TYPE_CROSSFADE);
+
+  /* ---- Page 1: Buttons ---- */
+  GtkWidget *btns_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
   GtkWidget *desc = gtk_label_new(
     "Custom shortcuts that appear in the bottom toolbar. "
@@ -474,14 +479,14 @@ void sb_preferences_dialog_show(GtkWindow *parent, gpointer reload_target,
   gtk_widget_set_margin_end(desc, 12);
   gtk_widget_set_margin_top(desc, 8);
   gtk_widget_set_margin_bottom(desc, 8);
-  gtk_box_append(GTK_BOX(content), desc);
+  gtk_box_append(GTK_BOX(btns_page), desc);
 
   GtkWidget *sw = gtk_scrolled_window_new();
   gtk_widget_set_vexpand(sw, TRUE);
   gtk_scrolled_window_set_propagate_natural_width(GTK_SCROLLED_WINDOW(sw), TRUE);
   gtk_widget_set_margin_start(sw, 8);
   gtk_widget_set_margin_end(sw, 8);
-  gtk_box_append(GTK_BOX(content), sw);
+  gtk_box_append(GTK_BOX(btns_page), sw);
 
   GtkWidget *group = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
   pd->group = group;
@@ -492,7 +497,6 @@ void sb_preferences_dialog_show(GtkWindow *parent, gpointer reload_target,
   g_signal_connect(drop, "leave", G_CALLBACK(on_drop_leave), pd);
   gtk_widget_add_controller(group, GTK_EVENT_CONTROLLER(drop));
 
-  /* CSS for drag feedback */
   GtkCssProvider *drag_css = gtk_css_provider_new();
   gtk_css_provider_load_from_string(drag_css,
     ".card { border-radius: 0; }"
@@ -509,7 +513,87 @@ void sb_preferences_dialog_show(GtkWindow *parent, gpointer reload_target,
 
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(sw), group);
 
-  adw_toolbar_view_set_content(tview, content);
+  gtk_stack_add_titled(GTK_STACK(stack), btns_page, "buttons", "Buttons");
+
+  /* ---- Page 2: Help ---- */
+  static const char *help_keys[] = {
+    "Ctrl+T",          "New tab",
+    "Ctrl+F",          "Search in terminal",
+    "Ctrl+P",          "Command palette",
+    "→ (Right)",       "Accept autocomplete suggestion",
+    "Ctrl++",          "Zoom in",
+    "Ctrl+−",          "Zoom out",
+    "Alt+1 … Alt+0",   "Run toolbar shortcut 1–10",
+    "Escape",          "Close search / Cancel",
+    "Ctrl+Shift+C",    "Copy selection",
+    "Ctrl+Shift+V",    "Paste from clipboard",
+    NULL
+  };
+
+  GtkWidget *help_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+
+  GtkWidget *help_desc = gtk_label_new(
+    "Keyboard shortcuts reference for ShellBar.");
+  gtk_widget_add_css_class(help_desc, "dim-label");
+  gtk_widget_add_css_class(help_desc, "caption");
+  gtk_label_set_wrap(GTK_LABEL(help_desc), TRUE);
+  gtk_widget_set_margin_start(help_desc, 12);
+  gtk_widget_set_margin_end(help_desc, 12);
+  gtk_widget_set_margin_top(help_desc, 8);
+  gtk_widget_set_margin_bottom(help_desc, 8);
+  gtk_box_append(GTK_BOX(help_page), help_desc);
+
+  GtkWidget *help_sw = gtk_scrolled_window_new();
+  gtk_widget_set_vexpand(help_sw, TRUE);
+
+  GtkWidget *help_list = gtk_list_box_new();
+  gtk_widget_add_css_class(help_list, "rich-list");
+  gtk_widget_add_css_class(help_list, "boxed-list");
+  gtk_widget_set_margin_start(help_list, 8);
+  gtk_widget_set_margin_end(help_list, 8);
+  gtk_widget_set_margin_bottom(help_list, 8);
+
+  for (int i = 0; help_keys[i]; i += 2) {
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_set_margin_start(row, 10);
+    gtk_widget_set_margin_end(row, 10);
+    gtk_widget_set_margin_top(row, 6);
+    gtk_widget_set_margin_bottom(row, 6);
+
+    GtkWidget *key_label = gtk_label_new(help_keys[i]);
+    gtk_widget_add_css_class(key_label, "heading");
+    gtk_widget_set_halign(key_label, GTK_ALIGN_START);
+    gtk_widget_set_hexpand(key_label, FALSE);
+
+    GtkWidget *desc_label = gtk_label_new(help_keys[i + 1]);
+    gtk_widget_add_css_class(desc_label, "dim-label");
+    gtk_widget_add_css_class(desc_label, "body");
+    gtk_label_set_xalign(GTK_LABEL(desc_label), 0.0);
+    gtk_widget_set_halign(desc_label, GTK_ALIGN_START);
+    gtk_widget_set_hexpand(desc_label, TRUE);
+
+    gtk_box_append(GTK_BOX(row), key_label);
+    gtk_box_append(GTK_BOX(row), desc_label);
+    gtk_list_box_append(GTK_LIST_BOX(help_list), row);
+  }
+
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(help_sw), help_list);
+  gtk_box_append(GTK_BOX(help_page), help_sw);
+
+  gtk_stack_add_titled(GTK_STACK(stack), help_page, "help", "Help");
+
+  /* ---- Stack switcher in header ---- */
+  GtkWidget *switcher = gtk_stack_switcher_new();
+  gtk_stack_switcher_set_stack(GTK_STACK_SWITCHER(switcher),
+                                GTK_STACK(stack));
+  gtk_widget_set_halign(switcher, GTK_ALIGN_CENTER);
+  gtk_widget_set_hexpand(switcher, TRUE);
+  adw_header_bar_set_title_widget(ADW_HEADER_BAR(header), switcher);
+
+  /* ---- Remove title text since switcher replaces it ---- */
+  gtk_window_set_title(GTK_WINDOW(win), "");
+
+  adw_toolbar_view_set_content(tview, stack);
   adw_window_set_content(ADW_WINDOW(win), GTK_WIDGET(tview));
   gtk_window_present(GTK_WINDOW(win));
 }

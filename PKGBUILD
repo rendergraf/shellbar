@@ -1,6 +1,6 @@
 # Maintainer: Xavier Araque <xavieraraque@gmail.com>
 pkgname=shellbar
-pkgver=1.7.0
+pkgver=1.8.0
 pkgrel=1
 pkgdesc="Terminal emulator with configurable command toolbar"
 arch=('x86_64')
