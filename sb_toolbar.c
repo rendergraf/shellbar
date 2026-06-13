@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.6.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.7.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -28,10 +28,29 @@ SbToolbar *sb_toolbar_new(void) {
   return self;
 }
 
+static gboolean sb_toolbar_flash_timeout(gpointer user_data) {
+  GtkWidget **target = user_data;
+  if (*target) {
+    g_object_remove_weak_pointer(G_OBJECT(*target), (gpointer *)target);
+    gtk_widget_remove_css_class(*target, "sb-flash");
+  }
+  g_free(target);
+  return G_SOURCE_REMOVE;
+}
+
+static void sb_toolbar_flash_button(GtkWidget *button) {
+  gtk_widget_add_css_class(button, "sb-flash");
+  GtkWidget **target = g_new0(GtkWidget *, 1);
+  *target = button;
+  g_object_add_weak_pointer(G_OBJECT(button), (gpointer *)target);
+  g_timeout_add(200, sb_toolbar_flash_timeout, target);
+}
+
 static void on_button_clicked(GtkButton *button, gpointer user_data) {
   SbToolbar *self = user_data;
   const char *cmd = g_object_get_data(G_OBJECT(button), "sb-command");
   if (cmd && self->active_terminal) {
+    sb_toolbar_flash_button(GTK_WIDGET(button));
     sb_terminal_write_str(self->active_terminal, cmd);
     sb_terminal_write(self->active_terminal, "\n", 1);
   }

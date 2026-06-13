@@ -79,16 +79,26 @@
 - [x] **5.2** Configurable keybinds
 - [x] **5.3** Drag & drop to reorder buttons
 - [x] **5.4** Tooltip shows command on hover
-- [ ] **5.5** Visual feedback when executing command (brief highlight)
+- [x] **5.5** Visual feedback when executing command (brief highlight)
 
 ## Phase 6: Extras
 
+- [x] **6.5** Terminal search (Ctrl+F) — inline search bar, match navigation, highlight with fade-out
 - [ ] **6.1** Button groups/folders
 - [ ] **6.2** Commands with variables (user input)
 - [ ] **6.3** Export/import configuration
 - [ ] **6.4** Split panes (horizontal/vertical)
-- [ ] **6.5** Terminal search (Ctrl+Shift+F)
 - [ ] **6.6** Command completion notifications
+
+## Phase 7: v1.7.0 Completed
+
+- [x] **7.1** Font zoom (Ctrl+= / Ctrl+-) with zoom level chip overlay
+- [x] **7.2** Visual button feedback (200ms flash on click)
+- [x] **7.3** Embedded SVG drag-handle icon (GResource, no theme dependency)
+- [x] **7.4** Utility bar toggle with tools SVG icon (green ON / gray OFF)
+- [x] **7.5** Preferences dialog rows: flat borders, extra padding
+- [x] **7.6** Drag-and-drop memory safety (weak pointer guards, deferred rebuild)
+- [x] **7.7** Search match highlight with rounded green border and fade-out on click
 
 ## Maintenance
 

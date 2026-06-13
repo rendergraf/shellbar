@@ -1,5 +1,5 @@
 Name:           shellbar
-Version:        1.6.0
+Version:        1.7.0
 Release:        1%{?dist}
 Summary:        Terminal emulator with configurable command toolbar
 
@@ -91,5 +91,5 @@ fi
 %{_datadir}/icons/hicolor/*/apps/shellbar.*
 
 %changelog
-* Thu Jun 05 2026 Xavier Araque <xavieraraque@gmail.com> - 1.6.0-1
-- Release v1.6.0
+* Thu Jun 05 2026 Xavier Araque <xavieraraque@gmail.com> - 1.7.0-1
+- Release v1.7.0
