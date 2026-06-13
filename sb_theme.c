@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.6.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.7.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -160,6 +160,9 @@ void sb_theme_apply_to_display(GdkDisplay *display, const SbTheme *theme) {
     ".sb-toolbar button:active {"
     "  background-color: alpha(%s, 0.01);"
     "}"
+    ".sb-toolbar button.sb-flash {"
+    "  background-color: %s;"
+    "}"
     /* Tab pill colors driven by the theme */
     ".sb-tab-row { background: alpha(%s, 0.10); border-radius: 6px;"
     "  padding: 0; margin: 0 2px; }"
@@ -200,6 +203,8 @@ void sb_theme_apply_to_display(GdkDisplay *display, const SbTheme *theme) {
     text_pri, text_pri,
     /* .sb-toolbar button:hover/active */
     accent_blue, accent_blue,
+    /* .sb-toolbar button.sb-flash */
+    accent_blue,
     /* .sb-tab-row */
     text_sec, text_sec, accent_blue, accent_blue,
     /* .sb-tab-button */

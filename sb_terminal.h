@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.6.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.7.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -29,5 +29,10 @@ void sb_terminal_paste(SbTerminal *self);
 void sb_terminal_select_all(SbTerminal *self);
 void sb_terminal_set_keybinds(SbTerminal *self, const SbConfigKeybind *keybinds, int count);
 void sb_terminal_apply_theme(SbTerminal *self, const SbTheme *theme);
+void sb_terminal_zoom_font(SbTerminal *self, int delta);
+void sb_terminal_search_toggle(SbTerminal *self);
+void sb_terminal_search_hide(SbTerminal *self);
+void sb_terminal_search_dismiss(SbTerminal *self);
+bool sb_terminal_search_is_visible(SbTerminal *self);
 
 #endif

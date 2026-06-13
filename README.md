@@ -1,4 +1,4 @@
-# ShellBar v1.6.0
+# ShellBar v1.7.0
 
 > ShellBar is a tool designed to streamline how developers interact with their projects, especially in complex environments such as monorepos.
 > ShellBar is **NOT a fork** of Ghostty. It uses `libghostty-vt` as a library via CMake FetchContent, maintaining complete independence from upstream Ghostty.
@@ -79,15 +79,18 @@ to run any command on the active terminal.
 
 - Full terminal with VT100-520, 256 colors, true color, Kitty protocol support
 - **Configurable toolbar** with command buttons from `~/.config/shellbar/config`
+- **Visual button feedback** — toolbar buttons flash with a brief highlight on click
 - **Text selection** with copy-on-select, mouse drag, double-click word, triple-click line
 - **Copy / Paste** (Ctrl+Shift+C / Ctrl+Shift+V) with GTK clipboard, middle-click paste
 - **Shift+Click** and **Shift+Arrow keys** extend selection
 - **URL detection** with hover underline, pointer cursor, and Ctrl+Click to open
+- **Search** (Ctrl+F) — inline search bar with match navigation, highlighted matches, and fade-out on click
+- **Font zoom** (Ctrl+= / Ctrl+-) — resize terminal font with on-screen zoom level indicator
 - **Smooth animated auto-scroll** to bottom on Enter key
 - **I-beam cursor** for text selection areas
-- **Drag-and-drop reorder** in Preferences dialog
+- **Drag-and-drop reorder** in Preferences dialog with embedded drag-handle icon
 - **Utility bar** — auto-detects installed TUI tools (btop, htop, lazygit, etc.) and launches them in the active terminal
-- **iOS-style toggle switches** for toolbar and utility bar with Cairo-drawn animated controls
+- **Utility bar toggle** with green tools icon when active, gray when inactive
 - **Improved keyboard focus** — capture-phase key handler ensures keystrokes reach the terminal even after tab close or dialog interaction
 - **Minimum terminal size** (80×24) enforced to fit tools like btop
 - **Right-click context menu**: Copy, Paste, Select All
@@ -108,29 +111,29 @@ to run any command on the active terminal.
 ### Fedora / RHEL (pre-built .rpm)
 
 ```sh
-curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.6.0-1.x86_64.rpm
-sudo rpm -i shellbar-1.6.0-1.x86_64.rpm
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.7.0-1.x86_64.rpm
+sudo rpm -i shellbar-1.7.0-1.x86_64.rpm
 ```
 
 Or with dnf:
 
 ```sh
-sudo dnf install https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.6.0-1.x86_64.rpm
+sudo dnf install https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.7.0-1.x86_64.rpm
 ```
 
 ### Debian / Ubuntu (pre-built .deb)
 
 ```sh
-curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.6.0_amd64.deb
-sudo dpkg -i shellbar_1.6.0_amd64.deb
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.7.0_amd64.deb
+sudo dpkg -i shellbar_1.7.0_amd64.deb
 sudo apt-get install -f
 ```
 
 ### Arch Linux (pre-built package)
 
 ```sh
-curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.6.0-1-x86_64.pkg.tar.zst
-sudo pacman -U shellbar-1.6.0-1-x86_64.pkg.tar.zst
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.7.0-1-x86_64.pkg.tar.zst
+sudo pacman -U shellbar-1.7.0-1-x86_64.pkg.tar.zst
 ```
 
 ### Build from source
@@ -152,16 +155,16 @@ Release build: `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release`
 The `build-release.sh` script builds Debian, Arch Linux, and Fedora packages:
 
 ```sh
-./build-release.sh 1.6.0               # All packages (.deb + .pkg.tar.zst + .rpm)
-./build-release.sh 1.6.0 --deb-only    # Debian only
-./build-release.sh 1.6.0 --arch-only   # Arch only
-./build-release.sh 1.6.0 --rpm-only    # Fedora only
+./build-release.sh 1.7.0               # All packages (.deb + .pkg.tar.zst + .rpm)
+./build-release.sh 1.7.0 --deb-only    # Debian only
+./build-release.sh 1.7.0 --arch-only   # Arch only
+./build-release.sh 1.7.0 --rpm-only    # Fedora only
 ```
 
 Packages are generated in `build/`:
-- **Debian/Ubuntu**: `shellbar_1.6.0_amd64.deb` — install with `sudo dpkg -i`
-- **Arch Linux**: `shellbar-1.6.0-1-x86_64.pkg.tar.zst` — install with `sudo pacman -U`
-- **Fedora/RHEL**: `shellbar-1.6.0-1.x86_64.rpm` — install with `sudo rpm -i`
+- **Debian/Ubuntu**: `shellbar_1.7.0_amd64.deb` — install with `sudo dpkg -i`
+- **Arch Linux**: `shellbar-1.7.0-1-x86_64.pkg.tar.zst` — install with `sudo pacman -U`
+- **Fedora/RHEL**: `shellbar-1.7.0-1.x86_64.rpm` — install with `sudo rpm -i`
 
 ## Requirements
 
@@ -232,10 +235,14 @@ kill -HUP $(pidof shellbar)
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+T` | New tab |
+| `Ctrl+F` | Search in terminal |
+| `Ctrl+=` / `Ctrl+KpAdd` | Zoom font in |
+| `Ctrl+-` / `Ctrl+KpSubtract` | Zoom font out |
 | `Ctrl+Shift+C` | Copy selection |
 | `Ctrl+Shift+V` | Paste |
 | `Ctrl+Shift+A` | Select all |
 | `Alt+1`..`Alt+9`, `Alt+0` | Execute toolbar buttons 1–10 |
+| `Escape` | Close search bar |
 | `Shift+Click` | Extend selection to clicked position |
 | `Shift+←` `Shift+→` `Shift+↑` `Shift+↓` | Extend selection by one cell |
 | `Ctrl+Click` on URL | Open URL in default browser |

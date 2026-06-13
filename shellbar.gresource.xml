@@ -8,5 +8,8 @@
     <file alias="128x128/apps/shellbar.png" compressed="true">assets/icon-128.png</file>
     <file alias="256x256/apps/shellbar.png" compressed="true">assets/icon-256.png</file>
     <file alias="scalable/apps/shellbar.svg" compressed="true">assets/icon.svg</file>
+    <file alias="scalable/actions/drag-handle.svg" compressed="true">assets/drag-handle.svg</file>
+    <file alias="scalable/actions/tools-on.svg" compressed="true">assets/tools-on.svg</file>
+    <file alias="scalable/actions/tools-off.svg" compressed="true">assets/tools-off.svg</file>
   </gresource>
 </gresources>

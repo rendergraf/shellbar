@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.6.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.7.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -44,6 +44,7 @@ struct _SbWindow {
   GtkWidget *toolbar_toggle_da;
   GtkWidget *util_bar_revealer;
   GtkWidget *util_bar_box;
+  GtkWidget *util_toggle_img;
   SbTabEntry *tabs;
   int tab_count;
   int tab_capacity;
@@ -271,9 +272,41 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller,
   int has_alt  = (state & GDK_ALT_MASK) != 0;
   int has_shift = (state & GDK_SHIFT_MASK) != 0;
 
+  /* Escape → close search if visible */
+  if (keyval == GDK_KEY_Escape && !has_ctrl && !has_alt) {
+    SbTerminal *term = active_terminal(self);
+    if (term && sb_terminal_search_is_visible(term)) {
+      sb_terminal_search_hide(term);
+      return GDK_EVENT_STOP;
+    }
+  }
+
   /* Ctrl+T = new tab */
   if (keyval == GDK_KEY_t && has_ctrl && !has_shift && !has_alt) {
     add_tab(self);
+    return GDK_EVENT_STOP;
+  }
+
+  /* Ctrl+F = search */
+  if (keyval == GDK_KEY_f && has_ctrl && !has_shift && !has_alt) {
+    SbTerminal *term = active_terminal(self);
+    if (term) sb_terminal_search_toggle(term);
+    return GDK_EVENT_STOP;
+  }
+
+  /* Ctrl+Plus / Ctrl+= → zoom in */
+  if (has_ctrl && !has_shift && !has_alt &&
+      (keyval == GDK_KEY_equal || keyval == GDK_KEY_KP_Add)) {
+    SbTerminal *zoom_term = active_terminal(self);
+    if (zoom_term) sb_terminal_zoom_font(zoom_term, 2);
+    return GDK_EVENT_STOP;
+  }
+
+  /* Ctrl+Minus → zoom out */
+  if (has_ctrl && !has_shift && !has_alt &&
+      (keyval == GDK_KEY_minus || keyval == GDK_KEY_KP_Subtract)) {
+    SbTerminal *zoom_term = active_terminal(self);
+    if (zoom_term) sb_terminal_zoom_font(zoom_term, -2);
     return GDK_EVENT_STOP;
   }
 
@@ -655,8 +688,13 @@ static void on_util_bar_toggle(GtkButton *button, gpointer userdata) {
     GTK_REVEALER(self->util_bar_revealer));
   gtk_revealer_set_reveal_child(
     GTK_REVEALER(self->util_bar_revealer), !visible);
-  GtkWidget *da = g_object_get_data(G_OBJECT(button), "sb-toggle-da");
-  if (da) gtk_widget_queue_draw(da);
+
+  if (!visible)
+    gtk_image_set_from_resource(GTK_IMAGE(self->util_toggle_img),
+      "/com/shellbar/icons/scalable/actions/tools-on.svg");
+  else
+    gtk_image_set_from_resource(GTK_IMAGE(self->util_toggle_img),
+      "/com/shellbar/icons/scalable/actions/tools-off.svg");
 }
 
 static GtkWidget *build_util_bar(SbWindow *self) {
@@ -952,21 +990,19 @@ static void sb_window_init(SbWindow *self) {
     create_menu_popup, G_MENU_MODEL(menu), (GDestroyNotify)g_object_unref);
   gtk_box_append(GTK_BOX(header), menu_btn);
 
-  /* Utility bar toggle button — iOS-style switch drawn with Cairo */
+  /* Utility bar toggle button — icon-based, green=ON / gray=OFF */
   GtkWidget *util_toggle_btn = gtk_button_new();
   gtk_widget_set_tooltip_text(util_toggle_btn, "Toggle Utility Bar");
   gtk_widget_set_can_focus(util_toggle_btn, FALSE);
   gtk_widget_add_css_class(util_toggle_btn, "flat");
   gtk_widget_add_css_class(util_toggle_btn, "sb-util-toggle-btn");
 
-  GtkWidget *toggle_da = gtk_drawing_area_new();
-  gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(toggle_da), 20);
-  gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(toggle_da), 16);
-  gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(toggle_da),
-    draw_ios_switch, self->util_bar_revealer, NULL);
-  gtk_widget_set_valign(toggle_da, GTK_ALIGN_CENTER);
-  gtk_button_set_child(GTK_BUTTON(util_toggle_btn), toggle_da);
-  g_object_set_data(G_OBJECT(util_toggle_btn), "sb-toggle-da", toggle_da);
+  self->util_toggle_img = gtk_image_new_from_resource(
+    "/com/shellbar/icons/scalable/actions/tools-off.svg");
+  gtk_image_set_pixel_size(GTK_IMAGE(self->util_toggle_img), 18);
+  gtk_widget_set_size_request(self->util_toggle_img, 24, 24);
+  gtk_widget_set_valign(self->util_toggle_img, GTK_ALIGN_CENTER);
+  gtk_button_set_child(GTK_BUTTON(util_toggle_btn), self->util_toggle_img);
 
   g_signal_connect(util_toggle_btn, "clicked", G_CALLBACK(on_util_bar_toggle), self);
   gtk_box_append(GTK_BOX(header), util_toggle_btn);

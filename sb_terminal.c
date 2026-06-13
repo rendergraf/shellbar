@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.6.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.7.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -18,6 +18,10 @@
 #endif
 
 #include <ghostty/vt.h>
+
+#ifndef G_PI
+#define G_PI 3.14159265358979323846
+#endif
 
 /* ------------------------------------------------------------------ */
 /* Private struct                                                     */
@@ -89,6 +93,32 @@ struct _SbTerminal {
   bool has_hover_url;
 
   int scale_factor;
+
+  int64_t zoom_show_until;
+  int zoom_percent;
+  guint zoom_timer;
+
+  GtkWidget *overlay;
+
+  GtkWidget *search_bar;
+  GtkWidget *search_entry;
+  GtkWidget *search_match_label;
+  GtkWidget *search_up_btn;
+  GtkWidget *search_down_btn;
+  char *search_text;
+  int *search_match_rows;
+  int *search_match_cols;
+  int search_match_count;
+  int search_current_match;
+  guint search_update_timer;
+  bool search_visible;
+
+  int64_t search_hl_fade_until;
+  guint search_hl_timer;
+  int search_hl_row;
+  int search_hl_col;
+  int search_hl_len;
+  bool search_hl_visible;
 };
 
 /* ------------------------------------------------------------------ */
@@ -625,6 +655,11 @@ static void select_word_at(SbTerminal *self, int col, int row) {
 static void left_click_pressed(GtkGestureClick *gesture, int n_press,
                                 double x, double y, gpointer user_data) {
   SbTerminal *self = user_data;
+
+  if (self->search_visible) {
+    sb_terminal_search_dismiss(self);
+    return;
+  }
 
   int col = (int)((x - self->padding) / self->cell_width);
   int row = (int)((y - self->padding) / self->cell_height);
@@ -1522,6 +1557,416 @@ static void on_scale_factor_changed(GObject *obj, GParamSpec *pspec,
 }
 
 /* ------------------------------------------------------------------ */
+/* Zoom handler (Ctrl+Plus / Ctrl+Minus)                                */
+/* ------------------------------------------------------------------ */
+
+static gboolean zoom_timer_tick(gpointer user_data) {
+  SbTerminal *self = user_data;
+  if (g_get_monotonic_time() >= self->zoom_show_until) {
+    self->zoom_timer = 0;
+    self->zoom_show_until = 0;
+    gtk_widget_queue_draw(self->widget);
+    return G_SOURCE_REMOVE;
+  }
+  gtk_widget_queue_draw(self->widget);
+  return G_SOURCE_CONTINUE;
+}
+
+void sb_terminal_zoom_font(SbTerminal *self, int delta) {
+  int new_size = self->font_size + delta;
+  if (new_size < 6)  new_size = 6;
+  if (new_size > 72) new_size = 72;
+  if (new_size == self->font_size) return;
+
+  self->font_size = new_size;
+  pango_font_description_set_size(self->font_desc, self->font_size * PANGO_SCALE);
+
+  PangoLayout *tmp = gtk_widget_create_pango_layout(self->widget, "M");
+  pango_layout_set_font_description(tmp, self->font_desc);
+  pango_layout_get_pixel_size(tmp, &self->cell_width, &self->cell_height);
+  g_object_unref(tmp);
+
+  self->zoom_percent = (self->font_size * 100) / 14;
+  self->zoom_show_until = g_get_monotonic_time() + 1200000;
+
+  if (self->zoom_timer == 0)
+    self->zoom_timer = g_timeout_add(30, zoom_timer_tick, self);
+
+  self->last_alloc_w = 0;
+  self->last_alloc_h = 0;
+  gtk_widget_queue_draw(self->widget);
+}
+
+static gboolean highlight_fade_tick(gpointer user_data) {
+  SbTerminal *self = user_data;
+  if (g_get_monotonic_time() >= self->search_hl_fade_until) {
+    self->search_hl_timer = 0;
+    self->search_hl_fade_until = 0;
+    self->search_hl_visible = false;
+    gtk_widget_queue_draw(self->widget);
+    return G_SOURCE_REMOVE;
+  }
+  gtk_widget_queue_draw(self->widget);
+  return G_SOURCE_CONTINUE;
+}
+
+/* ------------------------------------------------------------------ */
+/* Search (Ctrl+F)                                                      */
+/* ------------------------------------------------------------------ */
+
+static void search_navigate(SbTerminal *self, int direction);
+static void search_update_matches(SbTerminal *self);
+
+static gboolean search_debounce_tick(gpointer user_data) {
+  SbTerminal *self = user_data;
+  self->search_update_timer = 0;
+  search_update_matches(self);
+  return G_SOURCE_REMOVE;
+}
+
+static void search_schedule_update(SbTerminal *self) {
+  if (self->search_update_timer > 0)
+    g_source_remove(self->search_update_timer);
+  self->search_update_timer = g_timeout_add(150, search_debounce_tick, self);
+}
+
+static void on_search_entry_changed(GtkEditable *editable, gpointer user_data) {
+  (void)editable;
+  search_schedule_update(user_data);
+}
+
+static gboolean on_search_key(GtkEventControllerKey *controller,
+                              guint keyval, guint keycode,
+                              GdkModifierType state, gpointer user_data) {
+  (void)controller;
+  (void)keycode;
+  (void)state;
+  SbTerminal *self = user_data;
+
+  if (keyval == GDK_KEY_Escape) {
+    sb_terminal_search_hide(self);
+    return GDK_EVENT_STOP;
+  }
+  if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
+    search_navigate(self, 1);
+    return GDK_EVENT_STOP;
+  }
+  if (keyval == GDK_KEY_Down) {
+    search_navigate(self, 1);
+    return GDK_EVENT_STOP;
+  }
+  if (keyval == GDK_KEY_Up) {
+    search_navigate(self, -1);
+    return GDK_EVENT_STOP;
+  }
+  return GDK_EVENT_PROPAGATE;
+}
+
+static void on_search_up(GtkButton *btn, gpointer user_data) {
+  (void)btn;
+  search_navigate(user_data, -1);
+}
+
+static void on_search_down(GtkButton *btn, gpointer user_data) {
+  (void)btn;
+  search_navigate(user_data, 1);
+}
+
+static void on_search_close(GtkButton *btn, gpointer user_data) {
+  (void)btn;
+  sb_terminal_search_hide(user_data);
+}
+
+static void search_navigate(SbTerminal *self, int direction) {
+  if (self->search_match_count == 0) return;
+
+  self->search_current_match += direction;
+  if (self->search_current_match < 0)
+    self->search_current_match = self->search_match_count - 1;
+  else if (self->search_current_match >= self->search_match_count)
+    self->search_current_match = 0;
+
+  char label[32];
+  snprintf(label, sizeof(label), "%d / %d",
+    self->search_current_match + 1, self->search_match_count);
+  gtk_label_set_text(GTK_LABEL(self->search_match_label), label);
+
+  int idx = self->search_current_match;
+  self->search_hl_row = self->search_match_rows[idx];
+  self->search_hl_col = self->search_match_cols[idx];
+  self->search_hl_len = (int)strlen(self->search_text);
+  self->search_hl_visible = true;
+  self->search_hl_fade_until = 0;
+
+  GhosttyTerminalScrollbar sb = {0};
+  if (ghostty_terminal_get(self->terminal,
+        GHOSTTY_TERMINAL_DATA_SCROLLBAR, &sb) == GHOSTTY_SUCCESS) {
+    int target_row = self->search_match_rows[idx];
+    int center = (int)sb.offset + (int)(sb.len / 2);
+    int delta = target_row - center;
+
+    GhosttyTerminalScrollViewport sv = {
+      .tag = GHOSTTY_SCROLL_VIEWPORT_DELTA,
+      .value = { .delta = delta },
+    };
+    ghostty_terminal_scroll_viewport(self->terminal, sv);
+    ghostty_render_state_update(self->render_state, self->terminal);
+  }
+
+  gtk_widget_queue_draw(self->widget);
+}
+
+static void search_update_matches(SbTerminal *self) {
+  g_free(self->search_match_rows);
+  g_free(self->search_match_cols);
+  self->search_match_rows = NULL;
+  self->search_match_cols = NULL;
+  self->search_match_count = 0;
+  self->search_current_match = 0;
+
+  const char *text = gtk_editable_get_text(GTK_EDITABLE(self->search_entry));
+  if (!text || !text[0]) {
+    gtk_label_set_text(GTK_LABEL(self->search_match_label), "0 / 0");
+    gtk_widget_queue_draw(self->widget);
+    return;
+  }
+
+  g_free(self->search_text);
+  self->search_text = g_strdup(text);
+
+  GhosttyFormatterTerminalOptions opts = {
+    .size = sizeof(GhosttyFormatterTerminalOptions),
+    .emit = GHOSTTY_FORMATTER_FORMAT_PLAIN,
+    .unwrap = false,
+    .extra = {
+      .size = sizeof(GhosttyFormatterTerminalExtra),
+      .screen = { .size = sizeof(GhosttyFormatterScreenExtra) },
+    },
+  };
+
+  GhosttyFormatter fmt;
+  if (ghostty_formatter_terminal_new(NULL, &fmt, self->terminal, opts)
+      != GHOSTTY_SUCCESS)
+    return;
+
+  uint8_t *buf = NULL;
+  size_t buf_len = 0;
+  if (ghostty_formatter_format_buf(fmt, NULL, 0, &buf_len)
+      != GHOSTTY_OUT_OF_SPACE)
+    goto done;
+
+  buf = g_malloc(buf_len + 1);
+  if (ghostty_formatter_format_buf(fmt, buf, buf_len, &buf_len)
+      != GHOSTTY_SUCCESS) {
+    g_free(buf);
+    goto done;
+  }
+  buf[buf_len] = '\0';
+
+  int row = 0;
+  char *line = (char *)buf;
+  char *end = (char *)buf + buf_len;
+  int *rows = NULL, *cols = NULL;
+  int match_cap = 0;
+  int match_cnt = 0;
+  size_t tlen = strlen(self->search_text);
+
+  while (line < end) {
+    char *nl = memchr(line, '\n', (size_t)(end - line));
+    size_t line_len = nl ? (size_t)(nl - line) : (size_t)(end - line);
+
+    const char *pos = (const char *)line;
+    while ((pos = memmem(pos, line_len - (size_t)(pos - line),
+                         self->search_text, tlen)) != NULL) {
+      if (match_cnt >= match_cap) {
+        match_cap = match_cap ? match_cap * 2 : 64;
+        rows = g_realloc(rows, (size_t)match_cap * sizeof(int));
+        cols = g_realloc(cols, (size_t)match_cap * sizeof(int));
+      }
+      rows[match_cnt] = row;
+      cols[match_cnt] = (int)(pos - line);
+      match_cnt++;
+      pos++;
+    }
+
+    row++;
+    line = nl ? nl + 1 : end;
+  }
+
+  g_free(buf);
+
+  self->search_match_rows = rows;
+  self->search_match_cols = cols;
+  self->search_match_count = match_cnt;
+  self->search_current_match = 0;
+
+  char label[32];
+  if (match_cnt > 0)
+    snprintf(label, sizeof(label), "1 / %d", match_cnt);
+  else
+    snprintf(label, sizeof(label), "0 / 0");
+  gtk_label_set_text(GTK_LABEL(self->search_match_label), label);
+
+  if (match_cnt > 0)
+    search_navigate(self, 0);
+
+done:
+  ghostty_formatter_free(fmt);
+}
+
+static void create_search_bar(SbTerminal *self) {
+  self->search_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+  gtk_widget_set_valign(self->search_bar, GTK_ALIGN_END);
+  gtk_widget_set_halign(self->search_bar, GTK_ALIGN_CENTER);
+  gtk_widget_set_margin_bottom(self->search_bar, 10);
+  gtk_widget_add_css_class(self->search_bar, "sb-search-bar");
+
+  self->search_entry = gtk_entry_new();
+  gtk_entry_set_placeholder_text(GTK_ENTRY(self->search_entry), "Find...");
+  gtk_widget_set_size_request(self->search_entry, 220, -1);
+  gtk_widget_add_css_class(self->search_entry, "flat");
+  g_signal_connect(self->search_entry, "changed",
+    G_CALLBACK(on_search_entry_changed), self);
+  GtkEventController *key_ctrl = gtk_event_controller_key_new();
+  g_signal_connect(key_ctrl, "key-pressed",
+    G_CALLBACK(on_search_key), self);
+  gtk_widget_add_controller(self->search_entry, key_ctrl);
+  gtk_box_append(GTK_BOX(self->search_bar), self->search_entry);
+
+  GtkWidget *search_btn = gtk_button_new_with_label("Find");
+  gtk_widget_add_css_class(search_btn, "flat");
+  g_signal_connect(search_btn, "clicked",
+    G_CALLBACK(on_search_down), self);
+  gtk_box_append(GTK_BOX(self->search_bar), search_btn);
+
+  self->search_up_btn = gtk_button_new_with_label("▲");
+  gtk_widget_add_css_class(self->search_up_btn, "flat");
+  g_signal_connect(self->search_up_btn, "clicked",
+    G_CALLBACK(on_search_up), self);
+  gtk_box_append(GTK_BOX(self->search_bar), self->search_up_btn);
+
+  self->search_down_btn = gtk_button_new_with_label("▼");
+  gtk_widget_add_css_class(self->search_down_btn, "flat");
+  g_signal_connect(self->search_down_btn, "clicked",
+    G_CALLBACK(on_search_down), self);
+  gtk_box_append(GTK_BOX(self->search_bar), self->search_down_btn);
+
+  self->search_match_label = gtk_label_new("0 / 0");
+  gtk_widget_add_css_class(self->search_match_label, "caption");
+  gtk_widget_set_margin_start(self->search_match_label, 4);
+  gtk_widget_set_margin_end(self->search_match_label, 4);
+  gtk_widget_set_size_request(self->search_match_label, 56, -1);
+  gtk_box_append(GTK_BOX(self->search_bar), self->search_match_label);
+
+  GtkWidget *close_btn = gtk_button_new_with_label("✕");
+  gtk_widget_add_css_class(close_btn, "flat");
+  g_signal_connect(close_btn, "clicked",
+    G_CALLBACK(on_search_close), self);
+  gtk_box_append(GTK_BOX(self->search_bar), close_btn);
+
+  GtkCssProvider *css = gtk_css_provider_new();
+  gtk_css_provider_load_from_string(css,
+    ".sb-search-bar {"
+    "  background: alpha(black, 0.55);"
+    "  border: 1px solid alpha(@window_fg_color, 0.10);"
+    "  border-radius: 12px;"
+    "  padding: 4px 8px;"
+    "}"
+    ".sb-search-bar entry {"
+    "  background: alpha(@window_fg_color, 0.08);"
+    "  border: none;"
+    "  border-radius: 8px;"
+    "  box-shadow: none;"
+    "  min-height: 28px;"
+    "  padding: 2px 8px;"
+    "  font-size: 12px;"
+    "}"
+    ".sb-search-bar button {"
+    "  min-width: 28px;"
+    "  min-height: 28px;"
+    "  padding: 2px;"
+    "  font-size: 12px;"
+    "  border-radius: 8px;"
+    "}"
+  );
+  gtk_style_context_add_provider_for_display(
+    gtk_widget_get_display(self->search_bar),
+    GTK_STYLE_PROVIDER(css),
+    GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  g_object_unref(css);
+  g_object_ref(self->search_bar);
+}
+
+void sb_terminal_search_toggle(SbTerminal *self) {
+  if (self->search_visible) {
+    sb_terminal_search_hide(self);
+    return;
+  }
+
+  if (!self->search_bar)
+    create_search_bar(self);
+
+  gtk_overlay_add_overlay(GTK_OVERLAY(self->overlay), self->search_bar);
+  self->search_visible = true;
+
+  gtk_editable_set_text(GTK_EDITABLE(self->search_entry), "");
+  gtk_label_set_text(GTK_LABEL(self->search_match_label), "0 / 0");
+  gtk_widget_grab_focus(self->search_entry);
+}
+
+void sb_terminal_search_hide(SbTerminal *self) {
+  if (!self->search_visible) return;
+
+  if (self->search_update_timer > 0) {
+    g_source_remove(self->search_update_timer);
+    self->search_update_timer = 0;
+  }
+
+  if (self->search_hl_timer > 0) {
+    g_source_remove(self->search_hl_timer);
+    self->search_hl_timer = 0;
+  }
+  self->search_hl_visible = false;
+  self->search_hl_fade_until = 0;
+
+  g_free(self->search_text);
+  self->search_text = NULL;
+  g_free(self->search_match_rows);
+  self->search_match_rows = NULL;
+  g_free(self->search_match_cols);
+  self->search_match_cols = NULL;
+  self->search_match_count = 0;
+  self->search_current_match = 0;
+
+  gtk_overlay_remove_overlay(GTK_OVERLAY(self->overlay), self->search_bar);
+  self->search_visible = false;
+  gtk_widget_queue_draw(self->widget);
+}
+
+void sb_terminal_search_dismiss(SbTerminal *self) {
+  if (!self->search_visible) return;
+
+  int hl_row = self->search_hl_row;
+  int hl_col = self->search_hl_col;
+  int hl_len = self->search_hl_len;
+
+  sb_terminal_search_hide(self);
+
+  self->search_hl_row = hl_row;
+  self->search_hl_col = hl_col;
+  self->search_hl_len = hl_len;
+  self->search_hl_visible = true;
+  self->search_hl_fade_until = g_get_monotonic_time() + 600000;
+  if (self->search_hl_timer == 0)
+    self->search_hl_timer = g_timeout_add(30, highlight_fade_tick, self);
+  gtk_widget_queue_draw(self->widget);
+}
+
+bool sb_terminal_search_is_visible(SbTerminal *self) {
+  return self->search_visible;
+}
+
+/* ------------------------------------------------------------------ */
 /* Resize handler                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -1775,7 +2220,117 @@ static void render_terminal(GtkDrawingArea *area, cairo_t *cr,
     cairo_fill(cr);
   }
 
+  /* Search match highlight */
+  if (self->search_hl_visible || self->search_hl_fade_until > 0) {
+    GhosttyTerminalScrollbar sb = {0};
+    if (ghostty_terminal_get(self->terminal,
+          GHOSTTY_TERMINAL_DATA_SCROLLBAR, &sb) == GHOSTTY_SUCCESS) {
+      int vr = self->search_hl_row - (int)sb.offset;
+      if (vr >= 0 && vr < (int)sb.len) {
+        double alpha;
+        if (!self->search_hl_visible) {
+          alpha = 0.0;
+        } else if (self->search_hl_fade_until > 0) {
+          int64_t remaining = self->search_hl_fade_until
+                              - g_get_monotonic_time();
+          if (remaining <= 0)
+            alpha = 0.0;
+          else if (remaining < 200000)
+            alpha = 0.75 * remaining / 200000.0;
+          else
+            alpha = 0.75;
+        } else {
+          alpha = 0.75;
+        }
+
+        if (alpha > 0.01) {
+          double hx = self->padding + self->search_hl_col * self->cell_width;
+          double hy = self->padding + vr * self->cell_height;
+          double hw = self->search_hl_len * self->cell_width;
+          double hh = self->cell_height;
+          double r  = 3.0;
+
+          cairo_save(cr);
+          cairo_new_sub_path(cr);
+          cairo_arc(cr, hx + hw - r, hy + r, r,
+                    -G_PI / 2.0, 0);
+          cairo_arc(cr, hx + hw - r, hy + hh - r, r,
+                    0, G_PI / 2.0);
+          cairo_arc(cr, hx + r, hy + hh - r, r,
+                    G_PI / 2.0, G_PI);
+          cairo_arc(cr, hx + r, hy + r, r,
+                    G_PI, 3.0 * G_PI / 2.0);
+          cairo_close_path(cr);
+
+          cairo_set_source_rgba(cr, 0.24, 0.84, 0.36, alpha * 0.22);
+          cairo_fill_preserve(cr);
+          cairo_set_source_rgba(cr, 0.24, 0.84, 0.36, alpha);
+          cairo_set_line_width(cr, 1.5);
+          cairo_stroke(cr);
+          cairo_restore(cr);
+        }
+      }
+    }
+  }
+
   g_object_unref(layout);
+
+  /* Zoom level chip overlay */
+  {
+    int64_t now = g_get_monotonic_time();
+    if (now < self->zoom_show_until) {
+      int64_t remaining = self->zoom_show_until - now;
+      double alpha;
+      if (remaining > 1000000)
+        alpha = 0.85 * (1200000.0 - remaining) / 200000.0;
+      else if (remaining > 200000)
+        alpha = 0.85;
+      else
+        alpha = 0.85 * remaining / 200000.0;
+
+      char text[16];
+      snprintf(text, sizeof(text), "%d%%", self->zoom_percent);
+
+      cairo_text_extents_t extents;
+      cairo_select_font_face(cr, "JetBrains Mono, Monospace",
+        CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+      cairo_set_font_size(cr, 16.0);
+      cairo_text_extents(cr, text, &extents);
+
+      double chip_w = extents.width + 36;
+      double chip_h = extents.height + 18;
+      double chip_x = (width - chip_w) / 2.0;
+      double chip_y = height - chip_h - 12;
+      double r = 10.0;
+
+      cairo_save(cr);
+
+      cairo_new_sub_path(cr);
+      cairo_arc(cr, chip_x + chip_w - r, chip_y + r, r,
+                -G_PI / 2.0, 0);
+      cairo_arc(cr, chip_x + chip_w - r, chip_y + chip_h - r, r,
+                0, G_PI / 2.0);
+      cairo_arc(cr, chip_x + r, chip_y + chip_h - r, r,
+                G_PI / 2.0, G_PI);
+      cairo_arc(cr, chip_x + r, chip_y + r, r,
+                G_PI, 3.0 * G_PI / 2.0);
+      cairo_close_path(cr);
+
+      cairo_set_source_rgba(cr, 0.08, 0.08, 0.10, alpha);
+      cairo_fill_preserve(cr);
+      cairo_set_source_rgba(cr, 0.35, 0.35, 0.40, alpha * 0.6);
+      cairo_set_line_width(cr, 1.0);
+      cairo_stroke(cr);
+
+      cairo_set_source_rgba(cr, 0.90, 0.92, 0.94, alpha);
+      cairo_move_to(cr,
+        chip_x + (chip_w - extents.width) / 2.0,
+        chip_y + (chip_h + extents.height) / 2.0);
+      cairo_show_text(cr, text);
+
+      cairo_restore(cr);
+    }
+  }
 
   /* Reset global dirty */
   GhosttyRenderStateDirty clean_state = GHOSTTY_RENDER_STATE_DIRTY_FALSE;
@@ -1806,6 +2361,7 @@ SbTerminal *sb_terminal_new(void) {
   self->cols = 80;
   self->rows = 24;
   self->cursor_visible = true;
+  self->zoom_percent = 100;
 
   /* Font */
   self->font_desc = pango_font_description_new();
@@ -1821,6 +2377,11 @@ SbTerminal *sb_terminal_new(void) {
                    G_CALLBACK(on_query_tooltip), self);
 
   self->scale_factor = gtk_widget_get_scale_factor(self->widget);
+
+  self->overlay = gtk_overlay_new();
+  gtk_widget_set_hexpand(self->overlay, TRUE);
+  gtk_widget_set_vexpand(self->overlay, TRUE);
+  gtk_overlay_set_child(GTK_OVERLAY(self->overlay), self->widget);
 
   PangoLayout *tmp = gtk_widget_create_pango_layout(self->widget, "M");
   pango_layout_set_font_description(tmp, self->font_desc);
@@ -1968,6 +2529,18 @@ void sb_terminal_free(SbTerminal *self) {
     g_source_remove(self->scroll_anim_timer);
   if (self->follow_timer > 0)
     g_source_remove(self->follow_timer);
+  if (self->zoom_timer > 0)
+    g_source_remove(self->zoom_timer);
+  if (self->search_update_timer > 0)
+    g_source_remove(self->search_update_timer);
+
+  g_free(self->search_text);
+  g_free(self->search_match_rows);
+  g_free(self->search_match_cols);
+  if (self->search_hl_timer > 0)
+    g_source_remove(self->search_hl_timer);
+  if (self->search_bar)
+    g_object_unref(self->search_bar);
 
   if (self->pty_source > 0)
     g_source_remove(self->pty_source);
@@ -2001,7 +2574,7 @@ void sb_terminal_free(SbTerminal *self) {
 }
 
 GtkWidget *sb_terminal_get_widget(SbTerminal *self) {
-  return self->widget;
+  return self->overlay;
 }
 
 int sb_terminal_get_pty_fd(SbTerminal *self) {

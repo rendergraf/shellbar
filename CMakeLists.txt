@@ -1,4 +1,4 @@
-# ShellBar v1.6.0 — A command-bar terminal emulator built on libghostty-vt
+# ShellBar v1.7.0 — A command-bar terminal emulator built on libghostty-vt
 # Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
 # MIT License
 
@@ -32,7 +32,7 @@ add_executable(shellbar
   sb_theme.c
 )
 
-file(GLOB ICON_FILES CONFIGURE_DEPENDS assets/icon-*.png assets/icon.svg assets/logo.png)
+file(GLOB ICON_FILES CONFIGURE_DEPENDS assets/icon-*.png assets/*.svg assets/logo.png)
 
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/shellbar-resources.c

@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.6.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.7.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -175,6 +175,29 @@ static void move_button(PrefsData *pd, int from, int to) {
   rebuild_group(pd);
 }
 
+static GtkWidget *drop_highlight_row = NULL;
+
+static void clear_drop_highlight(void) {
+  if (drop_highlight_row) {
+    if (GTK_IS_WIDGET(drop_highlight_row))
+      gtk_widget_remove_css_class(drop_highlight_row, "drop-highlight");
+    drop_highlight_row = NULL;
+  }
+}
+
+typedef struct {
+  PrefsData *pd;
+  int from;
+  int to;
+} DeferredMove;
+
+static gboolean do_deferred_move(gpointer data) {
+  DeferredMove *dm = data;
+  move_button(dm->pd, dm->from, dm->to);
+  g_free(dm);
+  return G_SOURCE_REMOVE;
+}
+
 static GdkContentProvider *on_drag_prepare(GtkDragSource *source,
                                              double x, double y,
                                              gpointer user_data) {
@@ -190,9 +213,12 @@ static void on_drag_begin(GtkDragSource *source, GdkDrag *drag,
   (void)source;
   (void)drag;
   GtkWidget *grip = user_data;
+  if (!GTK_IS_WIDGET(grip)) return;
   GtkWidget *row = gtk_widget_get_parent(grip);
-  gtk_widget_set_opacity(row, 0.4);
-  gtk_widget_set_cursor_from_name(grip, "grabbing");
+  if (GTK_IS_WIDGET(row)) {
+    gtk_widget_set_opacity(row, 0.4);
+    gtk_widget_set_cursor_from_name(grip, "grabbing");
+  }
 }
 
 static void on_drag_end(GtkDragSource *source, GdkDrag *drag,
@@ -201,21 +227,11 @@ static void on_drag_end(GtkDragSource *source, GdkDrag *drag,
   (void)drag;
   (void)deleted;
   GtkWidget *grip = user_data;
+  if (!GTK_IS_WIDGET(grip)) return;
   GtkWidget *row = gtk_widget_get_parent(grip);
-  gtk_widget_set_opacity(row, 1.0);
+  if (GTK_IS_WIDGET(row))
+    gtk_widget_set_opacity(row, 1.0);
   gtk_widget_set_cursor_from_name(grip, "grab");
-}
-
-static guint drop_highlight_src = 0;
-static GtkWidget *drop_highlight_row = NULL;
-
-static gboolean on_drop_highlight(gpointer data) {
-  if (drop_highlight_row) {
-    gtk_widget_remove_css_class(drop_highlight_row, "drop-highlight");
-    drop_highlight_row = NULL;
-  }
-  drop_highlight_src = 0;
-  return G_SOURCE_REMOVE;
 }
 
 static GdkDragAction on_drop_motion(GtkDropTarget *target, gdouble x,
@@ -235,7 +251,7 @@ static GdkDragAction on_drop_motion(GtkDropTarget *target, gdouble x,
     target_child = gtk_widget_get_last_child(pd->group);
 
   if (target_child != drop_highlight_row) {
-    if (drop_highlight_row)
+    if (drop_highlight_row && GTK_IS_WIDGET(drop_highlight_row))
       gtk_widget_remove_css_class(drop_highlight_row, "drop-highlight");
     drop_highlight_row = target_child;
     if (target_child)
@@ -248,9 +264,7 @@ static GdkDragAction on_drop_motion(GtkDropTarget *target, gdouble x,
 static void on_drop_leave(GtkDropTarget *target, gpointer user_data) {
   (void)target;
   (void)user_data;
-  if (drop_highlight_row)
-    gtk_widget_remove_css_class(drop_highlight_row, "drop-highlight");
-  drop_highlight_row = NULL;
+  clear_drop_highlight();
 }
 
 static gboolean on_drop(GtkDropTarget *target, const GValue *value,
@@ -258,6 +272,8 @@ static gboolean on_drop(GtkDropTarget *target, const GValue *value,
   (void)x;
   PrefsData *pd = user_data;
   int src = g_value_get_int(value);
+
+  clear_drop_highlight();
 
   GtkWidget *child;
   int dest = 0;
@@ -269,7 +285,11 @@ static gboolean on_drop(GtkDropTarget *target, const GValue *value,
   }
   if (dest > src) dest--;
 
-  move_button(pd, src, dest);
+  DeferredMove *dm = g_new(DeferredMove, 1);
+  dm->pd = pd;
+  dm->from = src;
+  dm->to = dest;
+  g_idle_add(do_deferred_move, dm);
   return TRUE;
 }
 
@@ -287,6 +307,11 @@ static void on_remove_clicked(GtkButton *btn, gpointer userdata) {
     remove_button(pd, idx);
 }
 
+static const char *drag_handle_icon_name(GtkWidget *context_widget) {
+  (void)context_widget;
+  return "/com/shellbar/icons/scalable/actions/drag-handle.svg";
+}
+
 static void add_row_to_group(PrefsData *pd, SbConfigButton *btn, int idx) {
   GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
   gtk_widget_add_css_class(row, "card");
@@ -296,12 +321,15 @@ static void add_row_to_group(PrefsData *pd, SbConfigButton *btn, int idx) {
   gtk_widget_set_margin_bottom(row, 2);
   g_object_set_data(G_OBJECT(row), "idx", GINT_TO_POINTER(idx));
 
-  GtkWidget *grip = gtk_image_new_from_icon_name("list-drag-handle-symbolic");
+  const char *icon_path = drag_handle_icon_name(pd->group);
+  GtkWidget *grip = gtk_image_new_from_resource(icon_path);
   gtk_image_set_pixel_size(GTK_IMAGE(grip), 20);
+  gtk_widget_set_size_request(grip, 24, 24);
   gtk_widget_set_valign(grip, GTK_ALIGN_CENTER);
   gtk_widget_set_cursor_from_name(grip, "grab");
   gtk_widget_set_margin_start(grip, 2);
   gtk_widget_set_margin_end(grip, 6);
+  gtk_widget_add_css_class(grip, "drag-handle");
   gtk_box_append(GTK_BOX(row), grip);
 
   GtkDragSource *drag = gtk_drag_source_new();
@@ -314,6 +342,10 @@ static void add_row_to_group(PrefsData *pd, SbConfigButton *btn, int idx) {
 
   GtkWidget *info = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
   gtk_widget_set_hexpand(info, TRUE);
+  gtk_widget_set_margin_start(info, 6);
+  gtk_widget_set_margin_end(info, 6);
+  gtk_widget_set_margin_top(info, 4);
+  gtk_widget_set_margin_bottom(info, 4);
 
   GtkWidget *tl = gtk_label_new(btn->name ? btn->name : "(no name)");
   gtk_widget_add_css_class(tl, "body");
@@ -463,6 +495,8 @@ void sb_preferences_dialog_show(GtkWindow *parent, gpointer reload_target,
   /* CSS for drag feedback */
   GtkCssProvider *drag_css = gtk_css_provider_new();
   gtk_css_provider_load_from_string(drag_css,
+    ".card { border-radius: 0; }"
+    ".drag-handle { color: @text_color; opacity: 0.8; -gtk-icon-size: 20px; }"
     ".drop-highlight { border-top: 2px solid @accent_color; }");
   gtk_style_context_add_provider_for_display(
     gtk_widget_get_display(group),
