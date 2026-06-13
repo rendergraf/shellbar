@@ -240,6 +240,14 @@ Features:
 %setup -q -n shellbar
 
 %build
+# Download Zig for libghostty-vt build
+ZIG_VERSION="0.15.2"
+if [ ! -f build/zig-x86_64-linux-\${ZIG_VERSION}/zig ]; then
+  mkdir -p build
+  wget -q -O build/zig.tar.xz https://ziglang.org/download/\${ZIG_VERSION}/zig-x86_64-linux-\${ZIG_VERSION}.tar.xz
+  tar -xf build/zig.tar.xz -C build
+  rm -f build/zig.tar.xz
+fi
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -- -j\$(nproc)
 
@@ -305,9 +313,10 @@ EOF
 
     rpmbuild --define "_topdir $RPM_BUILD_DIR" -bb "$RPM_BUILD_DIR/SPECS/shellbar.spec" 2>/dev/null
 
-    if [ -f "$RPM_BUILD_DIR/x86_64/$RPM_NAME" ]; then
+    RPM_OUTPUT="$RPM_BUILD_DIR/RPMS/x86_64/$RPM_NAME"
+    if [ -f "$RPM_OUTPUT" ]; then
       mkdir -p "$BUILD_DIR"
-      cp "$RPM_BUILD_DIR/x86_64/$RPM_NAME" "$BUILD_DIR/$RPM_NAME"
+      cp "$RPM_OUTPUT" "$BUILD_DIR/$RPM_NAME"
       echo "=== RPM package built: $BUILD_DIR/$RPM_NAME ==="
     else
       echo "=== RPM build failed ==="

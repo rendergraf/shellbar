@@ -39,6 +39,13 @@ Features:
 %setup -q -n shellbar
 
 %build
+ZIG_VERSION="0.15.2"
+if [ ! -f build/zig-x86_64-linux-${ZIG_VERSION}/zig ]; then
+  mkdir -p build
+  wget -q -O build/zig.tar.xz https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz
+  tar -xf build/zig.tar.xz -C build
+  rm -f build/zig.tar.xz
+fi
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -- -j$(nproc)
 
