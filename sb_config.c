@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.9.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -295,6 +295,14 @@ SbConfig *sb_config_load(void) {
           config->keybind_count * sizeof(SbConfigKeybind));
         config->keybinds[config->keybind_count - 1] = kb;
       }
+    } else if (strcmp(key, "toolbar-position") == 0) {
+      g_free(config->toolbar_position);
+      if (*value == '"') {
+        char *vp = value;
+        config->toolbar_position = parse_quoted(&vp);
+      } else {
+        config->toolbar_position = g_strdup(value);
+      }
     }
   }
 
@@ -317,6 +325,7 @@ void sb_config_free(SbConfig *config) {
   }
   g_free(config->buttons);
   g_free(config->keybinds);
+  g_free(config->toolbar_position);
   g_free(config);
 }
 
@@ -354,6 +363,12 @@ void sb_config_save(SbConfig *config) {
   if (!f) { g_free(path); return; }
 
   fputs("# ShellBar Configuration\n", f);
+
+  if (config->toolbar_position && config->toolbar_position[0]) {
+    fprintf(f, "toolbar-position = ");
+    write_quoted(f, config->toolbar_position);
+    fputc('\n', f);
+  }
 
   for (int i = 0; i < config->button_count; i++) {
     SbConfigButton *b = &config->buttons[i];

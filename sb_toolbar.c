@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.9.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -16,16 +16,23 @@ struct _SbToolbar {
   void *command_cb_data;
 };
 
-SbToolbar *sb_toolbar_new(void) {
+SbToolbar *sb_toolbar_new(GtkOrientation orientation) {
   SbToolbar *self = g_malloc0(sizeof(SbToolbar));
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  self->widget = gtk_box_new(orientation, 4);
   self->box = GTK_BOX(self->widget);
 
-  gtk_widget_set_margin_start(self->widget, 6);
-  gtk_widget_set_margin_end(self->widget, 6);
-  gtk_widget_set_margin_top(self->widget, 4);
-  gtk_widget_set_margin_bottom(self->widget, 4);
+  if (orientation == GTK_ORIENTATION_HORIZONTAL) {
+    gtk_widget_set_margin_start(self->widget, 6);
+    gtk_widget_set_margin_end(self->widget, 6);
+    gtk_widget_set_margin_top(self->widget, 4);
+    gtk_widget_set_margin_bottom(self->widget, 4);
+  } else {
+    gtk_widget_set_margin_top(self->widget, 6);
+    gtk_widget_set_margin_bottom(self->widget, 6);
+    gtk_widget_set_margin_start(self->widget, 4);
+    gtk_widget_set_margin_end(self->widget, 4);
+  }
 
   gtk_widget_add_css_class(self->widget, "sb-toolbar");
 

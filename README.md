@@ -1,4 +1,4 @@
-# ShellBar v1.8.0
+# ShellBar v1.9.0
 
 > ShellBar is a tool designed to streamline how developers interact with their projects, especially in complex environments such as monorepos.
 > ShellBar is **NOT a fork** of Ghostty. It uses `libghostty-vt` as a library via CMake FetchContent, maintaining complete independence from upstream Ghostty.
@@ -104,6 +104,13 @@ to run any command on the active terminal.
 - Hot-reload config via `SIGHUP`
 - `Ctrl+T` shortcut for new tab
 - `Alt+1`..`Alt+0` shortcuts for toolbar buttons
+- **Command palette** (Ctrl+P) — search and run from shell history or PATH executables
+- **Inline ghost-text autocomplete** — suggest commands from your shell history and PATH
+- **Configurable button bar position**: top / bottom / left / right
+- **Preferences Settings page** with button bar position selector
+- **Tab transitions** — smooth slide-in animation when creating new tabs
+- **Resize overlay** — shows terminal dimensions (cols × rows) on window resize
+- **Button bar** can be toggled with an iOS-style switch in the bottom bar
 - Wayland and X11 compatible
 
 ## Install
@@ -111,29 +118,29 @@ to run any command on the active terminal.
 ### Fedora / RHEL (pre-built .rpm)
 
 ```sh
-curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.8.0-1.x86_64.rpm
-sudo rpm -i shellbar-1.8.0-1.x86_64.rpm
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.9.0-1.x86_64.rpm
+sudo rpm -i shellbar-1.9.0-1.x86_64.rpm
 ```
 
 Or with dnf:
 
 ```sh
-sudo dnf install https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.8.0-1.x86_64.rpm
+sudo dnf install https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.9.0-1.x86_64.rpm
 ```
 
 ### Debian / Ubuntu (pre-built .deb)
 
 ```sh
-curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.8.0_amd64.deb
-sudo dpkg -i shellbar_1.8.0_amd64.deb
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar_1.9.0_amd64.deb
+sudo dpkg -i shellbar_1.9.0_amd64.deb
 sudo apt-get install -f
 ```
 
 ### Arch Linux (pre-built package)
 
 ```sh
-curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.8.0-1-x86_64.pkg.tar.zst
-sudo pacman -U shellbar-1.8.0-1-x86_64.pkg.tar.zst
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.9.0-1-x86_64.pkg.tar.zst
+sudo pacman -U shellbar-1.9.0-1-x86_64.pkg.tar.zst
 ```
 
 ### Build from source
@@ -155,16 +162,16 @@ Release build: `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release`
 The `build-release.sh` script builds Debian, Arch Linux, and Fedora packages:
 
 ```sh
-./build-release.sh 1.8.0               # All packages (.deb + .pkg.tar.zst + .rpm)
-./build-release.sh 1.8.0 --deb-only    # Debian only
-./build-release.sh 1.8.0 --arch-only   # Arch only
-./build-release.sh 1.8.0 --rpm-only    # Fedora only
+./build-release.sh 1.9.0               # All packages (.deb + .pkg.tar.zst + .rpm)
+./build-release.sh 1.9.0 --deb-only    # Debian only
+./build-release.sh 1.9.0 --arch-only   # Arch only
+./build-release.sh 1.9.0 --rpm-only    # Fedora only
 ```
 
 Packages are generated in `build/`:
-- **Debian/Ubuntu**: `shellbar_1.8.0_amd64.deb` — install with `sudo dpkg -i`
-- **Arch Linux**: `shellbar-1.8.0-1-x86_64.pkg.tar.zst` — install with `sudo pacman -U`
-- **Fedora/RHEL**: `shellbar-1.8.0-1.x86_64.rpm` — install with `sudo rpm -i`
+- **Debian/Ubuntu**: `shellbar_1.9.0_amd64.deb` — install with `sudo dpkg -i`
+- **Arch Linux**: `shellbar-1.9.0-1-x86_64.pkg.tar.zst` — install with `sudo pacman -U`
+- **Fedora/RHEL**: `shellbar-1.9.0-1.x86_64.rpm` — install with `sudo rpm -i`
 
 ## Requirements
 

@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.9.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -106,6 +106,11 @@ struct _SbTerminal {
   int zoom_percent;
   guint zoom_timer;
 
+  int64_t resize_show_until;
+  uint16_t resize_cols;
+  uint16_t resize_rows;
+  guint resize_timer;
+
   GtkWidget *overlay;
 
   GtkWidget *search_bar;
@@ -129,9 +134,12 @@ struct _SbTerminal {
   bool search_hl_visible;
 
   SbIndexer *indexer;
+  GHashTable *cmd_hist_cache;
   char pending_suggestion[256];
   bool has_suggestion;
   guint suggestion_timer;
+  uint16_t suggestion_cursor_x;
+  uint16_t suggestion_cursor_y;
 };
 
 /* ------------------------------------------------------------------ */
@@ -1185,7 +1193,7 @@ static bool effect_device_attributes(GhosttyTerminal terminal, void *userdata,
 static GhosttyString effect_xtversion(GhosttyTerminal terminal, void *userdata) {
   (void)terminal;
   (void)userdata;
-  return (GhosttyString){ .ptr = (const uint8_t *)"shellbar 1.8.0", .len = 15 };
+  return (GhosttyString){ .ptr = (const uint8_t *)"shellbar 1.9.0", .len = 16 };
 }
 
 static bool effect_color_scheme(GhosttyTerminal terminal, void *userdata,
@@ -1383,14 +1391,23 @@ gboolean sb_terminal_handle_key(SbTerminal *self, guint keyval,
     }
   }
 
-  /* Right arrow or Ctrl+E → accept ghost-text suggestion */
+  /* Right arrow → accept ghost-text suggestion (only when cursor hasn't moved) */
   if ((keyval == GDK_KEY_Right || keyval == GDK_KEY_KP_Right)
       && !(state & (GDK_SHIFT_MASK | GDK_ALT_MASK | GDK_SUPER_MASK))) {
     if (self->has_suggestion && self->pending_suggestion[0]) {
-      sb_terminal_write_str(self, self->pending_suggestion);
+      uint16_t cx = 0, cy = 0;
+      ghostty_render_state_update(self->render_state, self->terminal);
+      ghostty_render_state_get(self->render_state,
+        GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X, &cx);
+      ghostty_render_state_get(self->render_state,
+        GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y, &cy);
+      if (cx == self->suggestion_cursor_x && cy == self->suggestion_cursor_y) {
+        sb_terminal_write_str(self, self->pending_suggestion);
+        clear_suggestion(self);
+        gtk_widget_queue_draw(self->widget);
+        return GDK_EVENT_STOP;
+      }
       clear_suggestion(self);
-      gtk_widget_queue_draw(self->widget);
-      return GDK_EVENT_STOP;
     }
   }
 
@@ -1467,6 +1484,22 @@ gboolean sb_terminal_handle_key(SbTerminal *self, guint keyval,
   if (self->has_selection)
     selection_clear(self);
 
+  bool nav_key = false;
+  switch (keyval) {
+    case GDK_KEY_Left: case GDK_KEY_KP_Left:
+    case GDK_KEY_Right: case GDK_KEY_KP_Right:
+    case GDK_KEY_Up: case GDK_KEY_KP_Up:
+    case GDK_KEY_Down: case GDK_KEY_KP_Down:
+    case GDK_KEY_Home: case GDK_KEY_KP_Home:
+    case GDK_KEY_End: case GDK_KEY_KP_End:
+    case GDK_KEY_Page_Up: case GDK_KEY_KP_Page_Up:
+    case GDK_KEY_Page_Down: case GDK_KEY_KP_Page_Down:
+      nav_key = true;
+      clear_suggestion(self);
+      gtk_widget_queue_draw(self->widget);
+      break;
+  }
+
   /* Enter key → flag follow-bottom for next PTY output */
   if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
     self->follow_bottom = true;
@@ -1527,14 +1560,14 @@ gboolean sb_terminal_handle_key(SbTerminal *self, guint keyval,
   if (res != GHOSTTY_SUCCESS || written == 0) {
     if (have_utf8) {
       pty_write_raw(self->pty_fd, sb_utf8, strlen(sb_utf8));
-      schedule_suggestion_lookup(self);
+      if (!nav_key) schedule_suggestion_lookup(self);
       return GDK_EVENT_STOP;
     }
     return GDK_EVENT_PROPAGATE;
   }
 
   pty_write_raw(self->pty_fd, buf, written);
-  schedule_suggestion_lookup(self);
+  if (!nav_key) schedule_suggestion_lookup(self);
   return GDK_EVENT_STOP;
 }
 
@@ -1552,7 +1585,7 @@ static gboolean on_suggestion_tick(gpointer user_data) {
   self->suggestion_timer = 0;
 
   clear_suggestion(self);
-  if (!self->indexer) return G_SOURCE_REMOVE;
+  if (!self->indexer && !self->cmd_hist_cache) return G_SOURCE_REMOVE;
 
   ghostty_render_state_update(self->render_state, self->terminal);
 
@@ -1580,26 +1613,49 @@ static gboolean on_suggestion_tick(gpointer user_data) {
     while (*prefix == ' ') prefix++;
 
     if (prefix[0]) {
-      GList *matches = sb_indexer_get_matches(self->indexer, prefix);
-      if (matches) {
-        const char *best = NULL;
-        for (GList *l = matches; l; l = l->next) {
-          const char *path = (const char *)l->data;
-          const char *base = strrchr(path, '/');
-          base = base ? base + 1 : path;
-          if (g_str_has_prefix(base, prefix)) {
-            if (!best || strlen(base) < strlen(best)) best = base;
+      const char *best = NULL;
+
+      GList *matches_to_free = NULL;
+
+      if (self->cmd_hist_cache) {
+        GList *keys = g_hash_table_get_keys(self->cmd_hist_cache);
+        for (GList *l = keys; l; l = l->next) {
+          const char *cmd = (const char *)l->data;
+          if (g_str_has_prefix(cmd, prefix)) {
+            if (!best || strlen(cmd) < strlen(best)) best = cmd;
           }
         }
-        if (best) {
-          const char *suffix = best + strlen(prefix);
-          g_strlcpy(self->pending_suggestion, suffix,
-                    sizeof(self->pending_suggestion));
-          if (self->pending_suggestion[0])
-            self->has_suggestion = TRUE;
-        }
-        g_list_free_full(matches, g_free);
+        g_list_free(keys);
       }
+
+      if (!best && self->indexer) {
+        GList *matches = sb_indexer_get_matches(self->indexer, prefix);
+        if (matches) {
+          for (GList *l = matches; l; l = l->next) {
+            const char *path = (const char *)l->data;
+            const char *base = strrchr(path, '/');
+            base = base ? base + 1 : path;
+            if (g_str_has_prefix(base, prefix)) {
+              if (!best || strlen(base) < strlen(best)) best = base;
+            }
+          }
+          matches_to_free = matches;
+        }
+      }
+
+      if (best) {
+        const char *suffix = best + strlen(prefix);
+        g_strlcpy(self->pending_suggestion, suffix,
+                  sizeof(self->pending_suggestion));
+        if (self->pending_suggestion[0]) {
+          self->has_suggestion = TRUE;
+          self->suggestion_cursor_x = cx;
+          self->suggestion_cursor_y = cy;
+        }
+      }
+
+      if (matches_to_free)
+        g_list_free_full(matches_to_free, g_free);
     }
   }
 
@@ -1619,6 +1675,10 @@ static void schedule_suggestion_lookup(SbTerminal *self) {
 
 void sb_terminal_set_indexer(SbTerminal *self, SbIndexer *indexer) {
   self->indexer = indexer;
+}
+
+void sb_terminal_set_history(SbTerminal *self, GHashTable *hist_cache) {
+  self->cmd_hist_cache = hist_cache;
 }
 
 void sb_terminal_set_activity_callback(SbTerminal *self,
@@ -1720,6 +1780,18 @@ static gboolean zoom_timer_tick(gpointer user_data) {
   if (g_get_monotonic_time() >= self->zoom_show_until) {
     self->zoom_timer = 0;
     self->zoom_show_until = 0;
+    gtk_widget_queue_draw(self->widget);
+    return G_SOURCE_REMOVE;
+  }
+  gtk_widget_queue_draw(self->widget);
+  return G_SOURCE_CONTINUE;
+}
+
+static gboolean resize_timer_tick(gpointer user_data) {
+  SbTerminal *self = user_data;
+  if (g_get_monotonic_time() >= self->resize_show_until) {
+    self->resize_timer = 0;
+    self->resize_show_until = 0;
     gtk_widget_queue_draw(self->widget);
     return G_SOURCE_REMOVE;
   }
@@ -2144,6 +2216,13 @@ static void recalc_geometry(SbTerminal *self, int alloc_w, int alloc_h) {
   if (new_cols != self->cols || new_rows != self->rows) {
     self->cols = new_cols;
     self->rows = new_rows;
+
+    self->resize_cols = new_cols;
+    self->resize_rows = new_rows;
+    self->resize_show_until = g_get_monotonic_time() + 1200000;
+    if (self->resize_timer == 0)
+      self->resize_timer = g_timeout_add(30, resize_timer_tick, self);
+
     ghostty_terminal_resize(self->terminal, self->cols, self->rows,
                             (uint32_t)self->cell_width,
                             (uint32_t)self->cell_height);
@@ -2511,6 +2590,63 @@ static void render_terminal(GtkDrawingArea *area, cairo_t *cr,
     }
   }
 
+  /* Resize dimensions chip overlay */
+  {
+    int64_t now = g_get_monotonic_time();
+    if (now < self->resize_show_until) {
+      int64_t remaining = self->resize_show_until - now;
+      double alpha;
+      if (remaining > 1000000)
+        alpha = 0.85 * (1200000.0 - remaining) / 200000.0;
+      else if (remaining > 200000)
+        alpha = 0.85;
+      else
+        alpha = 0.85 * remaining / 200000.0;
+
+      char text[32];
+      snprintf(text, sizeof(text), "%d × %d", self->resize_cols, self->resize_rows);
+
+      cairo_text_extents_t extents;
+      cairo_select_font_face(cr, "JetBrains Mono, Monospace",
+        CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+      cairo_set_font_size(cr, 14.0);
+      cairo_text_extents(cr, text, &extents);
+
+      double chip_w = extents.width + 32;
+      double chip_h = extents.height + 16;
+      double chip_x = (width - chip_w) / 2.0;
+      double chip_y = height - chip_h - 56;
+      double r = 8.0;
+
+      cairo_save(cr);
+
+      cairo_new_sub_path(cr);
+      cairo_arc(cr, chip_x + chip_w - r, chip_y + r, r,
+                -G_PI / 2.0, 0);
+      cairo_arc(cr, chip_x + chip_w - r, chip_y + chip_h - r, r,
+                0, G_PI / 2.0);
+      cairo_arc(cr, chip_x + r, chip_y + chip_h - r, r,
+                G_PI / 2.0, G_PI);
+      cairo_arc(cr, chip_x + r, chip_y + r, r,
+                G_PI, 3.0 * G_PI / 2.0);
+      cairo_close_path(cr);
+
+      cairo_set_source_rgba(cr, 0.08, 0.08, 0.10, alpha);
+      cairo_fill_preserve(cr);
+      cairo_set_source_rgba(cr, 0.35, 0.35, 0.40, alpha * 0.6);
+      cairo_set_line_width(cr, 1.0);
+      cairo_stroke(cr);
+
+      cairo_set_source_rgba(cr, 0.90, 0.92, 0.94, alpha);
+      cairo_move_to(cr,
+        chip_x + (chip_w - extents.width) / 2.0,
+        chip_y + (chip_h + extents.height) / 2.0);
+      cairo_show_text(cr, text);
+
+      cairo_restore(cr);
+    }
+  }
+
   /* Reset global dirty */
   GhosttyRenderStateDirty clean_state = GHOSTTY_RENDER_STATE_DIRTY_FALSE;
   ghostty_render_state_set(self->render_state,
@@ -2712,6 +2848,8 @@ void sb_terminal_free(SbTerminal *self) {
     g_source_remove(self->suggestion_timer);
   if (self->zoom_timer > 0)
     g_source_remove(self->zoom_timer);
+  if (self->resize_timer > 0)
+    g_source_remove(self->resize_timer);
   if (self->search_update_timer > 0)
     g_source_remove(self->search_update_timer);
 

@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.9.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -32,6 +32,7 @@ typedef struct {
   int button_count;
   SbConfigKeybind *keybinds;
   int keybind_count;
+  char *toolbar_position;
 } SbConfig;
 
 SbConfig *sb_config_load(void);

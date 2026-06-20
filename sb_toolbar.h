@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.9.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -19,7 +19,7 @@ typedef struct {
 
 typedef void (*SbToolbarCommandCb)(int index, void *userdata);
 
-SbToolbar *sb_toolbar_new(void);
+SbToolbar *sb_toolbar_new(GtkOrientation orientation);
 void sb_toolbar_free(SbToolbar *toolbar);
 GtkWidget *sb_toolbar_get_widget(SbToolbar *toolbar);
 void sb_toolbar_set_buttons(SbToolbar *toolbar, const SbToolbarButtonDef *buttons, int count);

@@ -1,4 +1,4 @@
-# ShellBar v1.1 — Architecture Plan
+# ShellBar v1.9 — Architecture Plan
 
 > **Author:** Xavier Araque <xavieraraque@gmail.com> — May 2026
 > **Repo:** [github.com/rendergraf/shellbar](https://github.com/rendergraf/shellbar)
@@ -202,12 +202,23 @@ Since we use `libghostty-vt` via CMake FetchContent:
 - [x] Dark theme
 - [x] Minimalist HeaderBar
 - [x] Tabs (Adw.TabView)
-- [ ] Animations and transitions
-- [ ] HiDPI
-- [ ] Ghostty-matching CSS
+- [x] Animations and transitions
+- [x] HiDPI
+- [x] Ghostty-matching CSS
 
-### Phase 5 — Extras
-- [ ] Keyboard shortcuts for buttons
+### Phase 5 — Shortcuts & UX
+- [x] Keyboard shortcuts for buttons (Alt+1..Alt+0)
+- [x] Configurable keybinds
+- [x] Drag & drop to reorder buttons
 - [ ] Button groups (folders)
 - [ ] Commands with variable arguments
 - [ ] Split panes
+
+### Phase 6 — v1.9.0 Autocomplete & Toolbar
+- [x] Command palette (Ctrl+P) with shell history + PATH search
+- [x] Inline ghost-text autocomplete with history-first completion
+- [x] Configurable button bar position: top / bottom / left / right
+- [x] Preferences Settings page with position selector
+- [x] Tab slide-in transitions
+- [x] Resize overlay (cols × rows chip)
+- [x] Tab pills styled as true tabs

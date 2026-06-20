@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.9.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -117,7 +117,12 @@ void sb_theme_apply_to_display(GdkDisplay *display, const SbTheme *theme) {
 
   char *css = g_strdup_printf(
     /* Window + Adwaita named-color overrides */
-    "window { background-color: %s; color: %s; }"
+    "window { background-color: %s; color: %s; padding: 0; margin: 0; }"
+    "window > box { padding: 0; margin: 0; }"
+    "window > deck { padding: 0; margin: 0; }"
+    ".sb-toolbar-view { padding: 0 0; margin: 0; }"
+    ".sb-toolbar-view box { padding: 0; margin: 0; }"
+    ".sb-toolbar-view revealer { padding: 0; margin: 0; }"
     ":root, window {"
     "  --window-bg-color: %s;"
     "  --window-fg-color: %s;"
@@ -131,7 +136,8 @@ void sb_theme_apply_to_display(GdkDisplay *display, const SbTheme *theme) {
     ".sb-chrome {"
     "  background-color: %s;"
     "  color: %s;"
-    "  border-top: 1px solid %s;"
+    "  padding: 0 2px 4px 2px;"
+    "  margin: 0 0 4px 0;"
     "}"
     /* Generic surfaces inside the chrome */
     ".sb-chrome button {"
@@ -144,7 +150,7 @@ void sb_theme_apply_to_display(GdkDisplay *display, const SbTheme *theme) {
     ".sb-toolbar {"
     "  background-color: alpha(%s, 0.08);"
     "  border-top: 1px solid alpha(%s, 0.06);"
-    "  border-radius: 4px;"
+    "  border-radius: 0px;"
     "}"
     ".sb-toolbar button {"
     "  background-color: alpha(%s, 0.06);"
@@ -167,14 +173,15 @@ void sb_theme_apply_to_display(GdkDisplay *display, const SbTheme *theme) {
     "  background-color: alpha(%s, 0.45);"
     "  border: 1px solid alpha(%s, 0.55);"
     "}"
-    /* Tab pill colors driven by the theme */
-    ".sb-tab-row { background: alpha(%s, 0.10); border-radius: 6px;"
-    "  padding: 0; margin: 0 2px; }"
+    /* Tab pills — top corners straight, bottom curved (tab shape) */
+    ".sb-tab-row { background: alpha(%s, 0.10);"
+    "  border-radius: 0 0 8px 8px;"
+    "  padding: 0; margin: 2px; }"
     ".sb-tab-row:hover { background: alpha(%s, 0.16); }"
     ".sb-tab-row.active { background: alpha(%s, 0.22); }"
     ".sb-tab-row.active:hover { background: alpha(%s, 0.28); }"
-    ".sb-tab-button { border-radius: 5px 0 0 5px; padding: 2px 8px 2px 10px;"
-    "  min-height: 24px; background: transparent; box-shadow: none;"
+    ".sb-tab-button { border-radius: 0; padding: 0 8px 0 10px;"
+    "  min-height: 30px; background: transparent; box-shadow: none;"
     "  border: none; outline: none; color: %s; }"
     ".sb-tab-button:hover { background: transparent; color: %s; }"
     ".sb-tab-button:checked { background: transparent; color: %s;"
@@ -189,13 +196,26 @@ void sb_theme_apply_to_display(GdkDisplay *display, const SbTheme *theme) {
     "  margin: 0 4px 0 0; border-radius: 9999px; -gtk-icon-size: 12px;"
     "  background: transparent; color: alpha(%s, 0.65); }"
     ".sb-tab-close:hover { background: transparent; color: %s; }"
-    ".sb-tab-row.active .sb-tab-close { color: %s; }",
+    ".sb-tab-row.active .sb-tab-close { color: %s; }"
+    /* Tab scrolled window — no internal padding */
+    ".sb-tab-scroll { padding: 0; margin: 0; }"
+    ".sb-tab-scroll > viewport { padding: 0; margin: 0; }"
+    ".sb-tab-scroll > viewport > box { padding: 0; margin: 0; }"
+    ".sb-tab-add {"
+    "  border-radius: 6px; padding: 2px; margin: 0 2px;"
+    "  min-width: 26px; min-height: 26px; -gtk-icon-size: 16px;"
+    "  color: alpha(%s, 0.55);"
+    "  background: none; border: none; box-shadow: none; outline: none; }"
+    ".sb-tab-add:hover,"
+    "button.sb-tab-add:hover {"
+    "  background-color: alpha(%s, 0.22);"
+    "  color: %s; }",
     /* window */
     bg, text_pri,
     /* :root vars */
     bg, text_pri, surface, header, text_pri, accent_blue, text_pri,
     /* .sb-chrome */
-    header, text_pri, border,
+    header, text_pri,
     /* .sb-chrome button */
     text_pri,
     /* .sb-chrome button:hover bg uses text_pri base */
@@ -216,12 +236,14 @@ void sb_theme_apply_to_display(GdkDisplay *display, const SbTheme *theme) {
     /* .sb-tab-button */
     text_sec, text_pri, text_pri,
     /* .sb-tab-close */
-    text_pri, text_pri, text_pri
+    text_pri, text_pri, text_pri,
+    /* .sb-tab-add */
+    text_sec, accent_cyan, text_pri
   );
 
   gtk_css_provider_load_from_string(g_chrome_provider, css);
   g_free(css);
 
   /* Avoid unused-variable warnings when only some fields are referenced. */
-  (void)accent_orange; (void)term_bg; (void)term_sel;
+  (void)accent_orange; (void)term_bg; (void)term_sel; (void)border;
 }

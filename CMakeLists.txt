@@ -1,4 +1,4 @@
-# ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
+# ShellBar v1.9.0 — A command-bar terminal emulator built on libghostty-vt
 # Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
 # MIT License
 

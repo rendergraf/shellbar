@@ -37,7 +37,7 @@
   - [x] Click signal → write(pty_fd, command\n)
   - [x] Writes to the active tab's terminal
 - [x] **2.3** "+" button placeholder for adding commands
-- [ ] **2.4** Configurable position: top / bottom / left / right
+- [x] **2.4** Configurable position: top / bottom / left / right
 
 ## Phase 3: Configuration
 
@@ -66,7 +66,7 @@
   - [x] Keyboard focus on terminal when switching tabs
   - [x] TabBar as standalone bar (not nested in header — fixes zero-height issue)
 - [x] **4.4** Thin scrollbar on the right
-- [ ] **4.5** Animations: resize overlay, new tab transition
+- [x] **4.5** Animations: resize overlay, new tab transition
 - [x] **4.6** HiDPI
 - [x] **4.7** JetBrains Mono font (via Pango, fallback Monospace)
 - [ ] **4.8** Ghostty-matching CSS:
@@ -99,6 +99,24 @@
 - [x] **7.5** Preferences dialog rows: flat borders, extra padding
 - [x] **7.6** Drag-and-drop memory safety (weak pointer guards, deferred rebuild)
 - [x] **7.7** Search match highlight with rounded green border and fade-out on click
+
+## Phase 8: v1.9.0 Completed
+
+- [x] **8.1** Command palette (Ctrl+P) — search and run from shell history + PATH executables
+- [x] **8.2** Inline ghost-text autocomplete with command history support
+- [x] **8.3** Autocomplete uses shell history first, falls back to PATH executables
+- [x] **8.4** Autocomplete accepts with Right arrow only when cursor hasn't moved
+- [x] **8.5** Autocomplete clears on navigation keys (Left, Up, Down, etc.)
+- [x] **8.6** Configurable button bar position: top / bottom / left / right
+- [x] **8.7** Preferences Settings page with button bar position dropdown
+- [x] **8.8** Hot-reload support for button bar position changes
+- [x] **8.9** Tab transitions — smooth slide-in animation for new tabs
+- [x] **8.10** Resize overlay — terminal dimensions (cols × rows) on window resize
+- [x] **8.11** Minimalist new tab button with green accent hover
+- [x] **8.12** Tab pills styled as true tabs (straight top, curved bottom)
+- [x] **8.13** Fixed autocomplete use-after-free causing invalid UTF-8 ghost text
+- [x] **8.14** Button bar position reload preserves widget references (g_object_ref/unref)
+- [x] **8.15** Tabs aligned to top edge, tighter spacing via AdwToolbarView flat style
 
 ## Maintenance
 

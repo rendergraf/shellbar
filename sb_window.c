@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.9.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -25,9 +25,11 @@ typedef struct {
   GtkWidget *tab_button;
   GtkWidget *tab_close_btn;
   GtkWidget *tab_row;
+  GtkWidget *tab_revealer;
   SbWindow *window;
   int active_button;
   guint idle_timer;
+  guint close_timer;
 } SbTabEntry;
 
 /* ------------------------------------------------------------------ */
@@ -46,6 +48,7 @@ struct _SbWindow {
   GtkWidget *toolbar_view;
   GtkWidget *toolbar_revealer;
   GtkWidget *toolbar_toggle_da;
+  GtkWidget *header_bar;
   GtkWidget *util_bar_revealer;
   GtkWidget *util_bar_box;
   GtkWidget *util_toggle_img;
@@ -69,6 +72,9 @@ struct _SbWindow {
   GHashTable *cmd_usage_counts;
   gboolean cmd_auto_execute;
   GHashTable *cmd_hist_cache;
+
+  GtkOrientation toolbar_orientation;
+  char *toolbar_position;
 };
 
 G_DEFINE_TYPE(SbWindow, sb_window, ADW_TYPE_APPLICATION_WINDOW)
@@ -202,9 +208,11 @@ static gboolean on_close_page(AdwTabView *view, AdwTabPage *page,
   int idx = tab_index_of(self, page);
   if (idx < 0) return GDK_EVENT_PROPAGATE;
 
-  gtk_box_remove(GTK_BOX(self->tab_bar_box), self->tabs[idx].tab_row);
+  gtk_box_remove(GTK_BOX(self->tab_bar_box), self->tabs[idx].tab_revealer);
   if (self->tabs[idx].idle_timer > 0)
     g_source_remove(self->tabs[idx].idle_timer);
+  if (self->tabs[idx].close_timer > 0)
+    g_source_remove(self->tabs[idx].close_timer);
   sb_terminal_free(self->tabs[idx].terminal);
   if (idx < self->tab_count - 1)
     memmove(&self->tabs[idx], &self->tabs[idx + 1],
@@ -238,6 +246,8 @@ static void add_tab(SbWindow *self) {
                              self->config_keybind_count);
   if (self->indexer)
     sb_terminal_set_indexer(term, self->indexer);
+  if (self->cmd_hist_cache)
+    sb_terminal_set_history(term, self->cmd_hist_cache);
 
   GtkWidget *child = sb_terminal_get_widget(term);
 
@@ -272,11 +282,18 @@ static void add_tab(SbWindow *self) {
   gtk_box_append(GTK_BOX(tab_row), tab_btn);
   gtk_box_append(GTK_BOX(tab_row), close_btn);
 
+  GtkWidget *tab_revealer = gtk_revealer_new();
+  gtk_revealer_set_transition_type(GTK_REVEALER(tab_revealer),
+                                    GTK_REVEALER_TRANSITION_TYPE_SLIDE_LEFT);
+  gtk_revealer_set_transition_duration(GTK_REVEALER(tab_revealer), 200);
+  gtk_revealer_set_reveal_child(GTK_REVEALER(tab_revealer), FALSE);
+  gtk_revealer_set_child(GTK_REVEALER(tab_revealer), tab_row);
+
   GtkWidget *prev = gtk_widget_get_prev_sibling(self->tab_add_btn);
   if (prev)
-    gtk_box_insert_child_after(GTK_BOX(self->tab_bar_box), tab_row, prev);
+    gtk_box_insert_child_after(GTK_BOX(self->tab_bar_box), tab_revealer, prev);
   else
-    gtk_box_prepend(GTK_BOX(self->tab_bar_box), tab_row);
+    gtk_box_prepend(GTK_BOX(self->tab_bar_box), tab_revealer);
 
   SbTabEntry *ent = &self->tabs[self->tab_count++];
   ent->terminal = term;
@@ -284,9 +301,11 @@ static void add_tab(SbWindow *self) {
   ent->tab_button = tab_btn;
   ent->tab_close_btn = close_btn;
   ent->tab_row = tab_row;
+  ent->tab_revealer = tab_revealer;
   ent->window = self;
   ent->active_button = -1;
   ent->idle_timer = 0;
+  ent->close_timer = 0;
 
   sb_terminal_set_activity_callback(term, on_terminal_activity, self);
   sb_terminal_set_enter_callback(term, on_terminal_enter, self);
@@ -294,6 +313,8 @@ static void add_tab(SbWindow *self) {
   adw_tab_view_set_selected_page(self->tab_view, page);
   sb_toolbar_set_active_terminal(self->toolbar, term);
   gtk_widget_grab_focus(child);
+
+  gtk_revealer_set_reveal_child(GTK_REVEALER(tab_revealer), TRUE);
 
   sync_tab_close_visibility(self);
 }
@@ -462,7 +483,7 @@ static void act_about(GSimpleAction *action, GVariant *param,
   const char *authors[] = { "Xavier Araque <xavieraraque@gmail.com>", NULL };
   gtk_show_about_dialog(GTK_WINDOW(self),
     "program-name", "ShellBar",
-    "version", "1.8.0",
+    "version", "1.9.0",
     "comments",
     "A command-bar terminal emulator for Linux, built on libghostty-vt",
     "website", "https://github.com/rendergraf/shellbar",
@@ -538,6 +559,89 @@ static void propagate_keybinds(SbWindow *self) {
 
 static void reload_buttons(SbWindow *self) {
   SbConfig *config = sb_config_load();
+
+  const char *new_pos = config->toolbar_position &&
+    config->toolbar_position[0] ? config->toolbar_position : "bottom";
+  if (strcmp(self->toolbar_position, new_pos) != 0) {
+    g_free(self->toolbar_position);
+    self->toolbar_position = g_strdup(new_pos);
+
+    GtkOrientation new_orient = GTK_ORIENTATION_HORIZONTAL;
+    GtkRevealerTransitionType new_trans = GTK_REVEALER_TRANSITION_TYPE_SLIDE_UP;
+    if (strcmp(new_pos, "top") == 0) {
+      new_orient = GTK_ORIENTATION_HORIZONTAL;
+      new_trans = GTK_REVEALER_TRANSITION_TYPE_SLIDE_DOWN;
+    } else if (strcmp(new_pos, "left") == 0) {
+      new_orient = GTK_ORIENTATION_VERTICAL;
+      new_trans = GTK_REVEALER_TRANSITION_TYPE_SLIDE_RIGHT;
+    } else if (strcmp(new_pos, "right") == 0) {
+      new_orient = GTK_ORIENTATION_VERTICAL;
+      new_trans = GTK_REVEALER_TRANSITION_TYPE_SLIDE_LEFT;
+    }
+
+    if (new_orient != self->toolbar_orientation) {
+      self->toolbar_orientation = new_orient;
+      SbTerminal *active = active_terminal(self);
+      sb_toolbar_free(self->toolbar);
+      self->toolbar = sb_toolbar_new(new_orient);
+      sb_toolbar_set_command_callback(self->toolbar, on_toolbar_command, self);
+      if (active) sb_toolbar_set_active_terminal(self->toolbar, active);
+      gtk_revealer_set_child(GTK_REVEALER(self->toolbar_revealer),
+                              sb_toolbar_get_widget(self->toolbar));
+    }
+
+    gtk_revealer_set_transition_type(GTK_REVEALER(self->toolbar_revealer),
+                                      new_trans);
+
+    GtkWidget *parent = gtk_widget_get_parent(self->toolbar_revealer);
+    if (parent) {
+      g_object_ref(self->toolbar_revealer);
+      if (ADW_IS_TOOLBAR_VIEW(parent))
+        adw_toolbar_view_remove(ADW_TOOLBAR_VIEW(parent),
+                                self->toolbar_revealer);
+      else if (GTK_IS_BOX(parent))
+        gtk_box_remove(GTK_BOX(parent), self->toolbar_revealer);
+      else
+        gtk_widget_unparent(self->toolbar_revealer);
+    }
+
+    AdwToolbarView *tv = ADW_TOOLBAR_VIEW(self->toolbar_view);
+    if (strcmp(new_pos, "top") == 0) {
+      adw_toolbar_view_add_top_bar(tv, self->toolbar_revealer);
+    } else if (strcmp(new_pos, "left") == 0 || strcmp(new_pos, "right") == 0) {
+      GtkWidget *cb = adw_toolbar_view_get_content(tv);
+      if (GTK_IS_BOX(cb)) {
+        if (strcmp(new_pos, "left") == 0) {
+          gtk_box_prepend(GTK_BOX(cb), self->toolbar_revealer);
+        } else {
+          GtkWidget *util = self->util_bar_revealer;
+          if (util && gtk_widget_get_parent(util) == cb) {
+            g_object_ref(util);
+            gtk_box_remove(GTK_BOX(cb), util);
+            gtk_box_append(GTK_BOX(cb), self->toolbar_revealer);
+            gtk_box_append(GTK_BOX(cb), util);
+            g_object_unref(util);
+          } else {
+            gtk_box_append(GTK_BOX(cb), self->toolbar_revealer);
+          }
+        }
+      }
+    } else {
+      GtkWidget *hdr = self->header_bar;
+      if (hdr && gtk_widget_get_parent(hdr) == GTK_WIDGET(tv)) {
+        g_object_ref(hdr);
+        adw_toolbar_view_remove(tv, hdr);
+        adw_toolbar_view_add_bottom_bar(tv, self->toolbar_revealer);
+        adw_toolbar_view_add_bottom_bar(tv, hdr);
+        g_object_unref(hdr);
+      } else {
+        adw_toolbar_view_add_bottom_bar(tv, self->toolbar_revealer);
+      }
+    }
+
+    if (parent)
+      g_object_unref(self->toolbar_revealer);
+  }
 
   if (config->button_count > 0) {
     SbToolbarButtonDef *defs = g_malloc_n(config->button_count,
@@ -716,6 +820,9 @@ static void sb_window_dispose(GObject *object) {
 
   sb_indexer_free(self->indexer);
   self->indexer = NULL;
+
+  g_free(self->toolbar_position);
+  self->toolbar_position = NULL;
 
   G_OBJECT_CLASS(sb_window_parent_class)->dispose(object);
 }
@@ -1494,7 +1601,17 @@ static void sb_window_init(SbWindow *self) {
     win_actions, G_N_ELEMENTS(win_actions), self);
 
   /* ---- Toolbar ---- */
-  self->toolbar = sb_toolbar_new();
+  SbConfig *init_cfg = sb_config_load();
+  self->toolbar_position = g_strdup(init_cfg->toolbar_position ?
+    init_cfg->toolbar_position : "bottom");
+  if (strcmp(self->toolbar_position, "left") == 0 ||
+      strcmp(self->toolbar_position, "right") == 0)
+    self->toolbar_orientation = GTK_ORIENTATION_VERTICAL;
+  else
+    self->toolbar_orientation = GTK_ORIENTATION_HORIZONTAL;
+  sb_config_free(init_cfg);
+
+  self->toolbar = sb_toolbar_new(self->toolbar_orientation);
   sb_toolbar_set_command_callback(self->toolbar, on_toolbar_command, self);
   reload_buttons(self);
 
@@ -1507,10 +1624,20 @@ static void sb_window_init(SbWindow *self) {
   sb_indexer_start_async(self->indexer, NULL,
     on_cmd_index_complete, self);
 
-  /* ---- Toolbar revealer (hidden by default, slides up from bottom) ---- */
+  /* ---- Toolbar revealer ---- */
   self->toolbar_revealer = gtk_revealer_new();
-  gtk_revealer_set_transition_type(GTK_REVEALER(self->toolbar_revealer),
-                                    GTK_REVEALER_TRANSITION_TYPE_SLIDE_UP);
+  if (strcmp(self->toolbar_position, "top") == 0)
+    gtk_revealer_set_transition_type(GTK_REVEALER(self->toolbar_revealer),
+                                      GTK_REVEALER_TRANSITION_TYPE_SLIDE_DOWN);
+  else if (strcmp(self->toolbar_position, "left") == 0)
+    gtk_revealer_set_transition_type(GTK_REVEALER(self->toolbar_revealer),
+                                      GTK_REVEALER_TRANSITION_TYPE_SLIDE_RIGHT);
+  else if (strcmp(self->toolbar_position, "right") == 0)
+    gtk_revealer_set_transition_type(GTK_REVEALER(self->toolbar_revealer),
+                                      GTK_REVEALER_TRANSITION_TYPE_SLIDE_LEFT);
+  else
+    gtk_revealer_set_transition_type(GTK_REVEALER(self->toolbar_revealer),
+                                      GTK_REVEALER_TRANSITION_TYPE_SLIDE_UP);
   gtk_revealer_set_transition_duration(GTK_REVEALER(self->toolbar_revealer), 250);
   gtk_revealer_set_reveal_child(GTK_REVEALER(self->toolbar_revealer), FALSE);
   gtk_revealer_set_child(GTK_REVEALER(self->toolbar_revealer),
@@ -1534,19 +1661,17 @@ static void sb_window_init(SbWindow *self) {
 
   /* ---- Custom tab bar (GtkBox in GtkScrolledWindow) ---- */
   self->tab_bar_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
-  gtk_widget_set_valign(self->tab_bar_box, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign(self->tab_bar_box, GTK_ALIGN_FILL);
   gtk_widget_set_hexpand(self->tab_bar_box, TRUE);
 
   self->tab_bar_scroll = gtk_scrolled_window_new();
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(self->tab_bar_scroll),
     GTK_POLICY_AUTOMATIC, GTK_POLICY_NEVER);
   gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(self->tab_bar_scroll), FALSE);
-  gtk_scrolled_window_set_min_content_height(
-    GTK_SCROLLED_WINDOW(self->tab_bar_scroll), 32);
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(self->tab_bar_scroll),
                                 self->tab_bar_box);
-  gtk_widget_set_size_request(self->tab_bar_scroll, -1, 34);
-  gtk_widget_set_valign(self->tab_bar_scroll, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign(self->tab_bar_scroll, GTK_ALIGN_START);
+  gtk_widget_add_css_class(self->tab_bar_scroll, "sb-tab-scroll");
 
   GtkCssProvider *tab_css = gtk_css_provider_new();
   gtk_css_provider_load_from_string(tab_css,
@@ -1670,7 +1795,7 @@ static void sb_window_init(SbWindow *self) {
    * height=0 bug for GtkScrolledWindow children, and pack_start ignores
    * hexpand, so we lay it out manually instead). ---- */
   GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-  gtk_widget_add_css_class(header, "toolbar");
+  self->header_bar = header;
   gtk_widget_add_css_class(header, "sb-chrome");
   gtk_widget_set_hexpand(header, TRUE);
 
@@ -1701,10 +1826,12 @@ static void sb_window_init(SbWindow *self) {
   gtk_box_append(GTK_BOX(header), self->tab_bar_scroll);
 
   /* New tab button (at end of tab bar) */
-  self->tab_add_btn = gtk_button_new_with_label("+");
+  self->tab_add_btn = gtk_button_new_from_icon_name("list-add-symbolic");
   gtk_widget_set_tooltip_text(self->tab_add_btn, "New Tab (Ctrl+T)");
   gtk_widget_set_can_focus(self->tab_add_btn, FALSE);
-  gtk_widget_set_hexpand(self->tab_add_btn, FALSE);
+  gtk_widget_set_size_request(self->tab_add_btn, 28, 28);
+  gtk_widget_set_valign(self->tab_add_btn, GTK_ALIGN_CENTER);
+  gtk_widget_add_css_class(self->tab_add_btn, "sb-tab-add");
   g_signal_connect(self->tab_add_btn, "clicked", G_CALLBACK(on_new_tab_clicked), self);
   gtk_box_append(GTK_BOX(self->tab_bar_box), self->tab_add_btn);
 
@@ -1754,16 +1881,37 @@ static void sb_window_init(SbWindow *self) {
 
   /* Horizontal box: terminal area (expands) + util bar (fixed width) */
   GtkWidget *content_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+
+  if (strcmp(self->toolbar_position, "left") == 0) {
+    gtk_box_append(GTK_BOX(content_box), self->toolbar_revealer);
+  }
+
   gtk_widget_set_hexpand(GTK_WIDGET(self->tab_view), TRUE);
   gtk_widget_set_vexpand(GTK_WIDGET(self->tab_view), TRUE);
   gtk_box_append(GTK_BOX(content_box), GTK_WIDGET(self->tab_view));
+
+  if (strcmp(self->toolbar_position, "right") == 0) {
+    gtk_box_append(GTK_BOX(content_box), self->toolbar_revealer);
+  }
   gtk_box_append(GTK_BOX(content_box), self->util_bar_revealer);
 
-  /* ---- Assemble toolbar view (bars at bottom) ---- */
+  /* ---- Assemble toolbar view ---- */
   self->toolbar_view = adw_toolbar_view_new();
-  adw_toolbar_view_add_bottom_bar(ADW_TOOLBAR_VIEW(self->toolbar_view),
+  gtk_widget_add_css_class(self->toolbar_view, "sb-toolbar-view");
+  adw_toolbar_view_set_extend_content_to_bottom_edge(ADW_TOOLBAR_VIEW(self->toolbar_view), TRUE);
+  adw_toolbar_view_set_bottom_bar_style(ADW_TOOLBAR_VIEW(self->toolbar_view), ADW_TOOLBAR_FLAT);
+
+  if (strcmp(self->toolbar_position, "top") == 0) {
+    adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(self->toolbar_view),
                                   self->toolbar_revealer);
-  adw_toolbar_view_add_bottom_bar(ADW_TOOLBAR_VIEW(self->toolbar_view), header);
+    adw_toolbar_view_add_bottom_bar(ADW_TOOLBAR_VIEW(self->toolbar_view), header);
+  } else if (strcmp(self->toolbar_position, "bottom") == 0) {
+    adw_toolbar_view_add_bottom_bar(ADW_TOOLBAR_VIEW(self->toolbar_view),
+                                    self->toolbar_revealer);
+    adw_toolbar_view_add_bottom_bar(ADW_TOOLBAR_VIEW(self->toolbar_view), header);
+  } else {
+    adw_toolbar_view_add_bottom_bar(ADW_TOOLBAR_VIEW(self->toolbar_view), header);
+  }
   adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(self->toolbar_view), content_box);
 
   adw_application_window_set_content(ADW_APPLICATION_WINDOW(self),

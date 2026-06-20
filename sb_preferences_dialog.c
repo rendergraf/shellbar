@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.9.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -10,6 +10,7 @@ typedef struct {
   GtkWidget *window;
   GtkWidget *group;
   SbConfig *config;
+  GtkWidget *position_dropdown;
   gpointer reload_target;
   void (*on_reload)(gpointer);
   void (*on_close)(gpointer);
@@ -399,6 +400,16 @@ static void rebuild_group(PrefsData *pd) {
 static void on_save(GtkButton *btn, gpointer userdata) {
   PrefsData *pd = userdata;
   (void)btn;
+
+  if (pd->position_dropdown) {
+    guint sel = gtk_drop_down_get_selected(GTK_DROP_DOWN(pd->position_dropdown));
+    const char *positions[] = { "bottom", "top", "left", "right" };
+    if (sel < G_N_ELEMENTS(positions)) {
+      g_free(pd->config->toolbar_position);
+      pd->config->toolbar_position = g_strdup(positions[sel]);
+    }
+  }
+
   sb_config_save(pd->config);
   if (pd->on_reload)
     pd->on_reload(pd->reload_target);
@@ -470,7 +481,7 @@ void sb_preferences_dialog_show(GtkWindow *parent, gpointer reload_target,
   GtkWidget *btns_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
   GtkWidget *desc = gtk_label_new(
-    "Custom shortcuts that appear in the bottom toolbar. "
+    "Custom shortcuts that appear in the button bar. "
     "Press Alt+1..0 to trigger them.");
   gtk_widget_add_css_class(desc, "dim-label");
   gtk_widget_add_css_class(desc, "caption");
@@ -515,7 +526,55 @@ void sb_preferences_dialog_show(GtkWindow *parent, gpointer reload_target,
 
   gtk_stack_add_titled(GTK_STACK(stack), btns_page, "buttons", "Buttons");
 
-  /* ---- Page 2: Help ---- */
+  /* ---- Page 2: Settings ---- */
+  GtkWidget *settings_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+
+  GtkWidget *settings_desc = gtk_label_new(
+    "General application settings.");
+  gtk_widget_add_css_class(settings_desc, "dim-label");
+  gtk_widget_add_css_class(settings_desc, "caption");
+  gtk_label_set_wrap(GTK_LABEL(settings_desc), TRUE);
+  gtk_widget_set_margin_start(settings_desc, 12);
+  gtk_widget_set_margin_end(settings_desc, 12);
+  gtk_widget_set_margin_top(settings_desc, 8);
+  gtk_widget_set_margin_bottom(settings_desc, 8);
+  gtk_box_append(GTK_BOX(settings_page), settings_desc);
+
+  GtkWidget *settings_list = gtk_list_box_new();
+  gtk_widget_add_css_class(settings_list, "rich-list");
+  gtk_widget_add_css_class(settings_list, "boxed-list");
+  gtk_widget_set_margin_start(settings_list, 8);
+  gtk_widget_set_margin_end(settings_list, 8);
+  gtk_widget_set_margin_bottom(settings_list, 8);
+
+  GtkWidget *pos_row = adw_action_row_new();
+  adw_preferences_row_set_title(ADW_PREFERENCES_ROW(pos_row), "Button bar position");
+  adw_action_row_set_subtitle(ADW_ACTION_ROW(pos_row),
+    "Where the command toolbar appears");
+
+  const char *positions[] = { "bottom", "top", "left", "right", NULL };
+  GtkStringList *pos_model = gtk_string_list_new((const char * const *)positions);
+  GtkWidget *pos_drop = gtk_drop_down_new(G_LIST_MODEL(pos_model), NULL);
+  pd->position_dropdown = pos_drop;
+
+  if (pd->config->toolbar_position && pd->config->toolbar_position[0]) {
+    for (guint i = 0; i < G_N_ELEMENTS(positions) - 1; i++) {
+      if (strcmp(pd->config->toolbar_position, positions[i]) == 0) {
+        gtk_drop_down_set_selected(GTK_DROP_DOWN(pos_drop), i);
+        break;
+      }
+    }
+  }
+
+  gtk_widget_set_valign(pos_drop, GTK_ALIGN_CENTER);
+  adw_action_row_add_suffix(ADW_ACTION_ROW(pos_row), pos_drop);
+  gtk_list_box_append(GTK_LIST_BOX(settings_list), pos_row);
+
+  gtk_box_append(GTK_BOX(settings_page), settings_list);
+
+  gtk_stack_add_titled(GTK_STACK(stack), settings_page, "settings", "Settings");
+
+  /* ---- Page 3: Help ---- */
   static const char *help_keys[] = {
     "Ctrl+T",          "New tab",
     "Ctrl+F",          "Search in terminal",

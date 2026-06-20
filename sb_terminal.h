@@ -1,5 +1,5 @@
 /*
- * ShellBar v1.8.0 — A command-bar terminal emulator built on libghostty-vt
+ * ShellBar v1.9.0 — A command-bar terminal emulator built on libghostty-vt
  * Copyright (c) 2026 Xavier Araque <xavieraraque@gmail.com>
  * MIT License
  */
@@ -40,6 +40,7 @@ void sb_terminal_search_dismiss(SbTerminal *self);
 bool sb_terminal_search_is_visible(SbTerminal *self);
 
 void sb_terminal_set_indexer(SbTerminal *self, SbIndexer *indexer);
+void sb_terminal_set_history(SbTerminal *self, GHashTable *hist_cache);
 void sb_terminal_set_activity_callback(SbTerminal *self, SbTerminalActivityCb cb,
                                        void *userdata);
 void sb_terminal_set_enter_callback(SbTerminal *self, SbTerminalEnterCb cb,
