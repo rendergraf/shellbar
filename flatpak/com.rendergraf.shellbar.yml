@@ -1,0 +1,44 @@
+app-id: com.rendergraf.shellbar
+runtime: org.gnome.Platform
+runtime-version: "48"
+sdk: org.gnome.Sdk
+command: shellbar
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  - --socket=pulseaudio
+  - --share=network
+  - --filesystem=host
+  - --talk-name=org.freedesktop.Flatpak
+modules:
+  - name: zig
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/bin
+      - cp zig /app/bin/zig
+    sources:
+      - type: archive
+        url: https://ziglang.org/download/0.15.1/zig-linux-x86_64-0.15.1.tar.xz
+        sha256: a0a35ef1f161f8a65f61b9c6bcd0807c19a3d1a27caa7e55c282170f560215a9
+
+  - name: libghostty-vt
+    buildsystem: simple
+    build-commands:
+      - zig build -Doptimize=ReleaseFast --prefix /app
+    sources:
+      - type: git
+        url: https://github.com/ghostty-org/ghostty.git
+        tag: v1.2.0
+        commit: 1234567890abcdef1234567890abcdef12345678
+
+  - name: shellbar
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_PREFIX=/app
+    sources:
+      - type: git
+        url: https://github.com/rendergraf/shellbar.git
+        tag: v1.9.0
