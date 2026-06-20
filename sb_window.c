@@ -1898,7 +1898,6 @@ static void sb_window_init(SbWindow *self) {
   /* ---- Assemble toolbar view ---- */
   self->toolbar_view = adw_toolbar_view_new();
   gtk_widget_add_css_class(self->toolbar_view, "sb-toolbar-view");
-  adw_toolbar_view_set_extend_content_to_bottom_edge(ADW_TOOLBAR_VIEW(self->toolbar_view), TRUE);
   adw_toolbar_view_set_bottom_bar_style(ADW_TOOLBAR_VIEW(self->toolbar_view), ADW_TOOLBAR_FLAT);
 
   if (strcmp(self->toolbar_position, "top") == 0) {
