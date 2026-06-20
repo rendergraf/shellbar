@@ -132,7 +132,7 @@ brew install shellbar
 ### Flatpak (Flathub)
 
 ```sh
-flatpak install flathub com.rendergraf.shellbar
+flatpak install flathub io.github.rendergraf.shellbar
 ```
 
 ### Fedora / RHEL (pre-built .rpm)
