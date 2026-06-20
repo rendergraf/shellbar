@@ -336,6 +336,19 @@ sudo apt-get install -f</pre>
       </div>
 
       <div class="rounded-2xl bg-white/5 border border-white/10 p-6">
+        <p class="text-cyan-400 text-sm font-semibold mb-3">Arch Linux — AUR (recommended)</p>
+        <pre class="text-xs text-gray-300 overflow-x-auto bg-white/5 rounded-xl p-4 leading-relaxed">
+yay -S shellbar</pre>
+      </div>
+
+      <div class="rounded-2xl bg-white/5 border border-white/10 p-6">
+        <p class="text-orange-400 text-sm font-semibold mb-3">Homebrew — Linux</p>
+        <pre class="text-xs text-gray-300 overflow-x-auto bg-white/5 rounded-xl p-4 leading-relaxed">
+brew tap rendergraf/shellbar
+brew install shellbar</pre>
+      </div>
+
+      <div class="rounded-2xl bg-white/5 border border-white/10 p-6">
         <p class="text-cyan-400 text-sm font-semibold mb-3">Arch Linux — pre-built package</p>
         <pre class="text-xs text-gray-300 overflow-x-auto bg-white/5 rounded-xl p-4 leading-relaxed">
 curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.9.0-1-x86_64.pkg.tar.zst
@@ -382,6 +395,9 @@ cmake --build build
         <span class="text-cyan-400">toolbar-button</span> = name=<span class="text-amber-300">"Storybook"</span>, command=<span class="text-amber-300">"pnpm storybook"</span>, icon=<span class="text-amber-300">"media-playback-start"</span><br>
         <span class="text-cyan-400">toolbar-button</span> = name=<span class="text-amber-300">"Build"</span>, command=<span class="text-amber-300">"pnpm build"</span>, icon=<span class="text-amber-300">"emblem-system"</span><br>
         <span class="text-cyan-400">toolbar-button</span> = name=<span class="text-amber-300">"Test"</span>, command=<span class="text-amber-300">"pnpm test"</span>, icon=<span class="text-amber-300">"emblem-default"</span><br>
+        <br>
+        <span class="text-gray-500"># Button bar position (top / bottom / left / right)</span><br>
+        <span class="text-cyan-400">toolbar-position</span> = "bottom"<br>
         <br>
         <span class="text-gray-500"># Keybinds</span><br>
         <span class="text-cyan-400">keybind</span> = action=<span class="text-amber-300">"copy"</span>, key=<span class="text-amber-300">"c"</span>, mods=<span class="text-amber-300">"ctrl+shift"</span><br>
