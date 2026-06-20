@@ -47,33 +47,27 @@
   <img src="https://img.shields.io/badge/Linux-FCC624?logo=linux&style=flat" alt="Linux">
 </p>
 
-## Description
+## What is ShellBar?
 
-ShellBar is a tool designed to streamline how developers interact with
-their projects, especially in complex environments such as monorepos.
+A Ghostty-like terminal for Linux that adds a **programmable command toolbar**. Instead of remembering and retyping long commands across your monorepos, you configure one-click buttons.
 
-In modern development workflows, terminal commands are often long,
-repetitive, and hard to remember. They are typically scattered across
-package.json files or internal documentation, forcing developers to spend
-valuable time searching for how to run common tasks.
+**Concrete example:** You work on 3 monorepos. Each has commands like:
+- `pnpm storybook:ds --port 3000`
+- `pnpm build && pnpm test`
+- `./deploy.sh staging`
 
-ShellBar solves this by centralizing your most frequently used commands
-into a dedicated action bar within the shell, turning them into instant,
-one-click shortcuts.
+In ShellBar, you add them once to `~/.config/shellbar/config`:
 
-This becomes especially powerful in monorepos or multi-environment
-projects (local, staging, production), as well as setups that vary by
-platform (web, desktop, mobile). Instead of repeatedly consulting
-documentation or navigating through scripts, developers can immediately
-trigger the right workflow.
+```ini
+toolbar-button = name="Storybook", command="pnpm storybook:ds --port 3000", icon="media-playback-start"
+toolbar-button = name="Build+Test", command="pnpm build && pnpm test", icon="emblem-system"
+toolbar-button = name="Deploy", command="./deploy.sh staging", icon="emblem-default"
+toolbar-position = "bottom"
+```
 
-The result is a more focused, efficient, and productive environment where
-operational friction is reduced, allowing developers to concentrate on
-what truly matters: building software.
+They appear as clickable buttons. **One click → runs the command in the active terminal.** No more scrolling through shell history or grepping package.json.
 
-Visually it's a Ghostty-like terminal for Linux (GTK4 + libadwaita, dark
-theme, inline tabs). The difference is the button bar that you configure
-to run any command on the active terminal.
+If you love Ghostty's look and speed but want a toolbar for your daily commands, ShellBar is for you.
 
 ## Features
 
@@ -114,6 +108,26 @@ to run any command on the active terminal.
 - Wayland and X11 compatible
 
 ## Install
+
+### Arch Linux (AUR)
+
+```sh
+yay -S shellbar
+```
+
+Or from pre-built package:
+
+```sh
+curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.9.0-1-x86_64.pkg.tar.zst
+sudo pacman -U shellbar-1.9.0-1-x86_64.pkg.tar.zst
+```
+
+### Homebrew (Linux)
+
+```sh
+brew tap rendergraf/shellbar
+brew install shellbar
+```
 
 ### Fedora / RHEL (pre-built .rpm)
 

@@ -1,1 +1,4 @@
 build/
+shellbar-*.pkg.tar.zst
+*.deb
+*.rpm

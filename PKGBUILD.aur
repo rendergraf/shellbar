@@ -1,0 +1,28 @@
+# Maintainer: Xavier Araque <xavieraraque@gmail.com>
+pkgname=shellbar
+pkgver=1.9.0
+pkgrel=1
+pkgdesc="A Ghostty-like terminal emulator with a configurable command toolbar, built on libghostty-vt"
+arch=('x86_64')
+url="https://github.com/rendergraf/shellbar"
+license=('MIT')
+depends=('gtk4' 'libadwaita' 'cairo' 'pango' 'vulkan-driver')
+makedepends=('cmake' 'ninja' 'git' 'zig')
+provides=("${pkgname}")
+conflicts=("${pkgname}")
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/rendergraf/shellbar/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "${srcdir}/${pkgname}-${pkgver}"
+  cmake -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build build
+}
+
+package() {
+  cd "${srcdir}/${pkgname}-${pkgver}"
+  install -Dm755 build/shellbar "${pkgdir}/usr/bin/shellbar"
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
