@@ -135,6 +135,34 @@ brew install shellbar
 flatpak install flathub io.github.rendergraf.shellbar
 ```
 
+### Snap Store
+
+```sh
+sudo snap install shellbar
+```
+
+### Nix / NixOS
+
+```sh
+nix-shell -p shellbar
+```
+
+### Copr (Fedora)
+
+```sh
+sudo dnf copr enable rendergraf/shellbar
+sudo dnf install shellbar
+```
+
+### AppImage (portable, any distro)
+
+Download the latest AppImage from [GitHub Releases](https://github.com/rendergraf/shellbar/releases/latest), make it executable and run:
+
+```sh
+chmod +x ShellBar-1.9.0-x86_64.AppImage
+./ShellBar-1.9.0-x86_64.AppImage
+```
+
 ### Fedora / RHEL (pre-built .rpm)
 
 ```sh

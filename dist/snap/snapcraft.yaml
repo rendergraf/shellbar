@@ -1,0 +1,65 @@
+name: shellbar
+version: "1.9.0"
+summary: A Ghostty-like terminal with a configurable command toolbar
+description: |
+  ShellBar is a terminal emulator for Linux built on libghostty-vt
+  (Ghostty's VT engine). It adds a programmable command toolbar so
+  you can run project commands with one click. GTK4 + libadwaita,
+  dark theme, tabs, search, autocomplete, command palette.
+
+grade: stable
+confinement: classic
+base: core24
+compression: lzo
+
+apps:
+  shellbar:
+    command: usr/bin/shellbar
+    environment:
+      TERM: xterm-256color
+
+parts:
+  shellbar:
+    plugin: cmake
+    source: https://github.com/rendergraf/shellbar.git
+    source-tag: v1.9.0
+    cmake-parameters:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_PREFIX=/usr
+    build-packages:
+      - gcc
+      - cmake
+      - ninja-build
+      - pkg-config
+      - libgtk-4-dev
+      - libadwaita-1-dev
+      - libpango1.0-dev
+      - libcairo2-dev
+      - libgraphene-1.0-dev
+      - libgdk-pixbuf-2.0-dev
+      - libharfbuzz-dev
+      - libvulkan-dev
+      - zig
+    stage-packages:
+      - libgtk-4-1
+      - libadwaita-1-0
+      - libpango-1.0-0
+      - libcairo2
+      - libgraphene-1.0-0
+      - libgdk-pixbuf-2.0-0
+      - libharfbuzz0b
+      - libvulkan1
+      - libglib2.0-0t64
+      - libc6
+    override-build: |
+      craftctl default
+      mkdir -p $CRAFT_PART_INSTALL/usr/share/applications
+      cat > $CRAFT_PART_INSTALL/usr/share/applications/shellbar.desktop << 'EOF'
+      [Desktop Entry]
+      Type=Application
+      Name=ShellBar
+      Comment=A Ghostty-like terminal with a configurable command toolbar
+      Exec=shellbar
+      Categories=Development;TerminalEmulator;GTK;
+      Terminal=false
+      EOF
