@@ -1,0 +1,39 @@
+name: Build and release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build pkg-config \
+            libgtk-4-dev libadwaita-1-dev libpango1.0-dev \
+            libcairo2-dev libgraphene-1.0-dev libgdk-pixbuf-2.0-dev \
+            libharfbuzz-dev libvulkan-dev rpm dpkg-dev
+
+      - name: Build
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Build packages
+        run: |
+          ./build-release.sh "${GITHUB_REF#refs/tags/v}"
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/shellbar_*.deb
+            build/shellbar-*.rpm
+            build/shellbar-*.pkg.tar.zst
