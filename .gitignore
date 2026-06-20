@@ -2,3 +2,5 @@ build/
 shellbar-*.pkg.tar.zst
 *.deb
 *.rpm
+build/appimage/
+*.AppImage
