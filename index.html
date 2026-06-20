@@ -334,6 +334,25 @@ flatpak install flathub io.github.rendergraf.shellbar</pre>
       </div>
 
       <div class="rounded-2xl bg-white/5 border border-white/10 p-6">
+        <p class="text-yellow-400 text-sm font-semibold mb-3">Snap Store — Ubuntu & derivatives</p>
+        <pre class="text-xs text-gray-300 overflow-x-auto bg-white/5 rounded-xl p-4 leading-relaxed">
+sudo snap install shellbar</pre>
+      </div>
+
+      <div class="rounded-2xl bg-white/5 border border-white/10 p-6">
+        <p class="text-purple-400 text-sm font-semibold mb-3">Nix / NixOS</p>
+        <pre class="text-xs text-gray-300 overflow-x-auto bg-white/5 rounded-xl p-4 leading-relaxed">
+nix-shell -p shellbar</pre>
+      </div>
+
+      <div class="rounded-2xl bg-white/5 border border-white/10 p-6">
+        <p class="text-red-400 text-sm font-semibold mb-3">Copr — Fedora community repo</p>
+        <pre class="text-xs text-gray-300 overflow-x-auto bg-white/5 rounded-xl p-4 leading-relaxed">
+sudo dnf copr enable rendergraf/shellbar
+sudo dnf install shellbar</pre>
+      </div>
+
+      <div class="rounded-2xl bg-white/5 border border-white/10 p-6">
         <p class="text-green-400 text-sm font-semibold mb-3">Fedora / RHEL — pre-built .rpm</p>
         <pre class="text-xs text-gray-300 overflow-x-auto bg-white/5 rounded-xl p-4 leading-relaxed">
 curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.9.0-1.x86_64.rpm
@@ -359,6 +378,14 @@ yay -S shellbar</pre>
         <pre class="text-xs text-gray-300 overflow-x-auto bg-white/5 rounded-xl p-4 leading-relaxed">
 curl -LO https://github.com/rendergraf/shellbar/releases/latest/download/shellbar-1.9.0-1-x86_64.pkg.tar.zst
 sudo pacman -U shellbar-1.9.0-1-x86_64.pkg.tar.zst</pre>
+      </div>
+
+      <div class="rounded-2xl bg-white/5 border border-white/10 p-6">
+        <p class="text-amber-400 text-sm font-semibold mb-3">AppImage — portable, any distro</p>
+        <pre class="text-xs text-gray-300 overflow-x-auto bg-white/5 rounded-xl p-4 leading-relaxed">
+chmod +x ShellBar-1.9.0-x86_64.AppImage
+./ShellBar-1.9.0-x86_64.AppImage</pre>
+        <p class="text-xs text-gray-500 mt-2">Download from <a href="https://github.com/rendergraf/shellbar/releases/latest" class="text-blue-400 hover:underline">GitHub Releases</a></p>
       </div>
 
       <div class="rounded-2xl bg-white/5 border border-white/10 p-6">
