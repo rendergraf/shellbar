@@ -16,9 +16,9 @@ pkg_check_modules(CAIRO REQUIRED cairo)
 set(ZIG_VERSION_REQUIRED "0.15.2")
 set(ZIG_DIR "${CMAKE_BINARY_DIR}/zig-x86_64-linux-${ZIG_VERSION_REQUIRED}")
 set(ZIG_EXECUTABLE "${ZIG_DIR}/zig" CACHE FILEPATH "Path to Zig compiler")
+set(ZIG_NEED_DOWNLOAD TRUE)
 
 find_program(SYSTEM_ZIG zig)
-
 if(SYSTEM_ZIG)
     execute_process(
         COMMAND "${SYSTEM_ZIG}" version
@@ -27,11 +27,12 @@ if(SYSTEM_ZIG)
         ERROR_QUIET)
     if(SYSTEM_ZIG_VERSION STREQUAL ZIG_VERSION_REQUIRED)
         set(ZIG_EXECUTABLE "${SYSTEM_ZIG}" CACHE FILEPATH "Path to Zig compiler" FORCE)
+        set(ZIG_NEED_DOWNLOAD FALSE)
         message(STATUS "Using system Zig ${ZIG_VERSION_REQUIRED}")
     endif()
 endif()
 
-if(NOT ZIG_EXECUTABLE STREQUAL SYSTEM_ZIG)
+if(ZIG_NEED_DOWNLOAD)
     if(NOT EXISTS "${ZIG_DIR}/zig")
         set(ZIG_TARBALL "zig-x86_64-linux-${ZIG_VERSION_REQUIRED}.tar.xz")
         set(ZIG_URL "https://ziglang.org/download/${ZIG_VERSION_REQUIRED}/${ZIG_TARBALL}")
@@ -59,6 +60,7 @@ if(NOT ZIG_EXECUTABLE STREQUAL SYSTEM_ZIG)
 
         file(REMOVE "${ZIG_ARCHIVE}")
     endif()
+    set(ZIG_EXECUTABLE "${ZIG_DIR}/zig" CACHE FILEPATH "Path to Zig compiler" FORCE)
     message(STATUS "Using downloaded Zig ${ZIG_VERSION_REQUIRED}")
 endif()
 
