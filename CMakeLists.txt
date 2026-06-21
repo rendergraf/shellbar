@@ -13,7 +13,54 @@ pkg_check_modules(ADW REQUIRED libadwaita-1)
 pkg_check_modules(PANGO REQUIRED pango)
 pkg_check_modules(CAIRO REQUIRED cairo)
 
-find_program(ZIG_EXECUTABLE zig REQUIRED)
+set(ZIG_VERSION_REQUIRED "0.15.2")
+set(ZIG_DIR "${CMAKE_BINARY_DIR}/zig-x86_64-linux-${ZIG_VERSION_REQUIRED}")
+set(ZIG_EXECUTABLE "${ZIG_DIR}/zig" CACHE FILEPATH "Path to Zig compiler")
+
+find_program(SYSTEM_ZIG zig)
+
+if(SYSTEM_ZIG)
+    execute_process(
+        COMMAND "${SYSTEM_ZIG}" version
+        OUTPUT_VARIABLE SYSTEM_ZIG_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+    if(SYSTEM_ZIG_VERSION STREQUAL ZIG_VERSION_REQUIRED)
+        set(ZIG_EXECUTABLE "${SYSTEM_ZIG}" CACHE FILEPATH "Path to Zig compiler" FORCE)
+        message(STATUS "Using system Zig ${ZIG_VERSION_REQUIRED}")
+    endif()
+endif()
+
+if(NOT ZIG_EXECUTABLE STREQUAL SYSTEM_ZIG)
+    if(NOT EXISTS "${ZIG_DIR}/zig")
+        set(ZIG_TARBALL "zig-x86_64-linux-${ZIG_VERSION_REQUIRED}.tar.xz")
+        set(ZIG_URL "https://ziglang.org/download/${ZIG_VERSION_REQUIRED}/${ZIG_TARBALL}")
+        set(ZIG_ARCHIVE "${CMAKE_BINARY_DIR}/${ZIG_TARBALL}")
+
+        message(STATUS "Downloading Zig ${ZIG_VERSION_REQUIRED} (ghostty requires this exact version)...")
+        file(DOWNLOAD "${ZIG_URL}" "${ZIG_ARCHIVE}"
+             STATUS ZIG_DOWNLOAD_STATUS SHOW_PROGRESS)
+
+        list(GET ZIG_DOWNLOAD_STATUS 0 ZIG_DOWNLOAD_EXIT_CODE)
+        if(NOT ZIG_DOWNLOAD_EXIT_CODE EQUAL 0)
+            list(GET ZIG_DOWNLOAD_STATUS 1 ZIG_DOWNLOAD_ERROR)
+            message(FATAL_ERROR "Failed to download Zig: ${ZIG_DOWNLOAD_ERROR}")
+        endif()
+
+        message(STATUS "Extracting Zig ${ZIG_VERSION_REQUIRED}...")
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -E tar xf "${ZIG_ARCHIVE}"
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+            RESULT_VARIABLE ZIG_EXTRACT_RESULT)
+
+        if(NOT ZIG_EXTRACT_RESULT EQUAL 0)
+            message(FATAL_ERROR "Failed to extract Zig archive")
+        endif()
+
+        file(REMOVE "${ZIG_ARCHIVE}")
+    endif()
+    message(STATUS "Using downloaded Zig ${ZIG_VERSION_REQUIRED}")
+endif()
 
 include(FetchContent)
 FetchContent_Declare(ghostty
