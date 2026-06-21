@@ -16,7 +16,7 @@ pkg_check_modules(CAIRO REQUIRED cairo)
 set(ZIG_VERSION_REQUIRED "0.15.2")
 set(ZIG_DIR "${CMAKE_BINARY_DIR}/zig-x86_64-linux-${ZIG_VERSION_REQUIRED}")
 set(ZIG_EXECUTABLE "${ZIG_DIR}/zig" CACHE FILEPATH "Path to Zig compiler")
-set(ZIG_NEED_DOWNLOAD TRUE)
+set(ZIG_NEED_DOWNLOAD TRUE CACHE BOOL "Whether to download Zig")
 
 find_program(SYSTEM_ZIG zig)
 if(SYSTEM_ZIG)
