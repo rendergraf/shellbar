@@ -13,7 +13,7 @@ pkg_check_modules(ADW REQUIRED libadwaita-1)
 pkg_check_modules(PANGO REQUIRED pango)
 pkg_check_modules(CAIRO REQUIRED cairo)
 
-set(ZIG_EXECUTABLE ${CMAKE_SOURCE_DIR}/build/zig-x86_64-linux-0.15.2/zig CACHE FILEPATH "Path to Zig compiler")
+find_program(ZIG_EXECUTABLE zig REQUIRED)
 
 include(FetchContent)
 FetchContent_Declare(ghostty

@@ -193,9 +193,13 @@ sudo pacman -U shellbar-1.9.0-1-x86_64.pkg.tar.zst
 
 ### Build from source
 
-Zig (>= 0.15.2) is downloaded automatically during the build process and stored in `build/`.
+Zig >= 0.15.2 required. Install it via your package manager, then build:
 
 ```sh
+sudo pacman -S zig          # Arch
+sudo apt install zig        # Debian/Ubuntu
+sudo dnf install zig        # Fedora
+
 git clone https://github.com/rendergraf/shellbar
 cd shellbar
 cmake -B build -G Ninja
@@ -225,7 +229,7 @@ Packages are generated in `build/`:
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| Zig | >= 0.15.2 | Build libghostty-vt (auto-downloaded) |
+| Zig | >= 0.15.2 | Build libghostty-vt (prerequisite) |
 | C compiler | C11 (gcc/clang) | Build ShellBar |
 | CMake | >= 3.19 | Build system |
 | Ninja | — | Build backend |
